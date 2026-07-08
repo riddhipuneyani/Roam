@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: roam-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: roam
+      POSTGRES_PASSWORD: roam
+      POSTGRES_DB: roam
+    volumes:
+      - roam_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roam -d roam"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  roam_postgres_data:
