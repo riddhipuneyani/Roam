@@ -6,6 +6,7 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Dashboard } from './pages/Dashboard';
 import { Plan } from './pages/Plan';
+import { Itinerary } from './pages/Itinerary';
 import { StyleGuide } from './pages/StyleGuide';
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/plan" element={<Plan />} />
+            <Route path="/itinerary/:tripId" element={<Itinerary />} />
           </Route>
         </Routes>
       </BrowserRouter>

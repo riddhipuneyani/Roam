@@ -1,3 +1,11 @@
+import type {
+  ActivitySlot,
+  DestinationOption,
+  Trip,
+  TripPreferences,
+  TripSummary,
+} from './types';
+
 export interface User {
   id: string;
   email: string;
@@ -15,11 +23,14 @@ export interface ApiError {
 
 export class ApiRequestError extends Error {
   status: number;
+  /** Parsed error payload, when the server sent one (e.g. { tripId }). */
+  data: unknown;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, data?: unknown) {
     super(message);
     this.name = 'ApiRequestError';
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -58,7 +69,7 @@ export async function apiRequest<T>(
       typeof data === 'object' && data !== null && 'error' in data && data.error
         ? data.error
         : 'Request failed';
-    throw new ApiRequestError(message, response.status);
+    throw new ApiRequestError(message, response.status, data);
   }
 
   return data;
@@ -83,4 +94,48 @@ export const authApi = {
     }),
 
   me: () => apiRequest<AuthResponse>('/api/auth/me'),
+};
+
+export const tripsApi = {
+  list: () => apiRequest<{ trips: TripSummary[] }>('/api/trips'),
+
+  get: (id: string) => apiRequest<{ trip: Trip }>(`/api/trips/${id}`),
+
+  duplicate: (id: string) =>
+    apiRequest<{ trip: Trip }>(`/api/trips/${id}/duplicate`, { method: 'POST' }),
+
+  remove: (id: string) =>
+    apiRequest<{ message: string }>(`/api/trips/${id}`, { method: 'DELETE' }),
+
+  regenerateActivity: (id: string, dayNumber: number, slot: ActivitySlot) =>
+    apiRequest<{ trip: Trip }>(`/api/trips/${id}/regenerate`, {
+      method: 'POST',
+      body: JSON.stringify({ dayNumber, slot }),
+    }),
+
+  regenerateRestaurant: (id: string, dayNumber: number, restaurantIndex: number) =>
+    apiRequest<{ trip: Trip }>(`/api/trips/${id}/regenerate`, {
+      method: 'POST',
+      body: JSON.stringify({ dayNumber, slot: 'restaurant', restaurantIndex }),
+    }),
+};
+
+export const generateApi = {
+  destinations: (preferences: TripPreferences) =>
+    apiRequest<{ options: DestinationOption[] }>('/api/generate/destinations', {
+      method: 'POST',
+      body: JSON.stringify({ preferences }),
+    }),
+
+  itinerary: (preferences: TripPreferences) =>
+    apiRequest<{ trip: Trip }>('/api/generate/itinerary', {
+      method: 'POST',
+      body: JSON.stringify({ preferences }),
+    }),
+
+  retryItinerary: (tripId: string) =>
+    apiRequest<{ trip: Trip }>('/api/generate/itinerary', {
+      method: 'POST',
+      body: JSON.stringify({ tripId }),
+    }),
 };

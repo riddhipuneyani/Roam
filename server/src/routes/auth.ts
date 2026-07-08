@@ -7,6 +7,7 @@ import {
   signToken,
 } from '../lib/jwt.js';
 import { requireAuth } from '../middleware/auth.js';
+import { asyncHandler } from '../lib/async-handler.js';
 import { toPublicUser } from '../lib/user.js';
 
 const router = Router();
@@ -27,7 +28,7 @@ function validateName(name: unknown): name is string {
   return typeof name === 'string' && name.trim().length >= 1;
 }
 
-router.post('/signup', async (req: Request, res: Response) => {
+router.post('/signup', asyncHandler(async (req: Request, res: Response) => {
   const { email, password, name } = req.body ?? {};
 
   if (!validateEmail(email)) {
@@ -72,9 +73,9 @@ router.post('/signup', async (req: Request, res: Response) => {
   const token = signToken({ userId: user.id });
   res.cookie(AUTH_COOKIE_NAME, token, getCookieOptions());
   res.status(201).json({ user: toPublicUser(user) });
-});
+}));
 
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body ?? {};
 
   if (!validateEmail(email) || typeof password !== 'string' || !password) {
@@ -100,7 +101,7 @@ router.post('/login', async (req: Request, res: Response) => {
   const token = signToken({ userId: user.id });
   res.cookie(AUTH_COOKIE_NAME, token, getCookieOptions());
   res.json({ user: toPublicUser(user) });
-});
+}));
 
 router.post('/logout', (_req: Request, res: Response) => {
   res.clearCookie(AUTH_COOKIE_NAME, {

@@ -13,4 +13,20 @@ model User {
   passwordHash String
   name         String
   createdAt    DateTime @default(now())
+  trips        Trip[]
+}
+
+model Trip {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  destination String
+  status      String   @default("draft")
+  preferences Json
+  itinerary   Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
 }

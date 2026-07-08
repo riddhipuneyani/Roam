@@ -1,6 +1,8 @@
 import { FormEvent, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { Button, Card, FadeInUp, Input, Spinner } from '../components/ui';
+import { Button, FadeInUp, Input, Spinner } from '../components/ui';
+import { TravelImage } from '../components/TravelImage';
+import { SCENES } from '../lib/images';
 import { ApiRequestError } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 
@@ -36,19 +38,27 @@ export function Login() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
-      <FadeInUp className="w-full max-w-md">
-        <Card padding="lg">
-          <h1 className="font-display text-display-sm">Welcome back</h1>
-          <p className="mt-2 font-body text-body text-text-muted">
-            Log in to continue planning your journeys.
+    <main className="grid min-h-screen bg-background lg:grid-cols-12">
+      {/* Form column — left-aligned content, not a floating card */}
+      <div className="flex flex-col px-6 py-6 md:px-12 lg:col-span-5 lg:px-16">
+        <Link to="/" className="font-display text-2xl italic tracking-tight">
+          Roam
+        </Link>
+
+        <FadeInUp className="my-auto max-w-md py-16">
+          <p className="kicker-accent">Welcome back</p>
+          <h1 className="mt-4 font-display text-display-md [text-wrap:balance]">
+            Pick up where you left off.
+          </h1>
+          <p className="mt-3 font-body text-body text-text-muted">
+            Your drafts and itineraries are exactly as you left them.
           </p>
 
-          <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-5">
+          <form onSubmit={handleSubmit} className="mt-10 flex flex-col gap-5">
             {error && (
               <div
                 role="alert"
-                className="rounded-xl border border-accent/25 bg-accent-muted/15 px-4 py-3 font-body text-body-sm text-accent-hover"
+                className="border-l-2 border-accent bg-accent-muted/15 px-4 py-3 font-body text-body-sm text-accent-hover"
               >
                 {error}
               </div>
@@ -74,11 +84,11 @@ export function Login() {
               placeholder="Your password"
             />
 
-            <Button type="submit" disabled={isSubmitting} className="mt-1 w-full">
+            <Button type="submit" disabled={isSubmitting} className="mt-1 w-full py-3">
               {isSubmitting ? (
                 <>
                   <Spinner size="sm" label="Logging in" className="[&>span]:bg-background/90" />
-                  Logging in...
+                  Logging in…
                 </>
               ) : (
                 'Log in'
@@ -86,17 +96,36 @@ export function Login() {
             </Button>
           </form>
 
-          <p className="mt-6 text-center font-body text-body-sm text-text-muted">
-            Don&apos;t have an account?{' '}
+          <p className="mt-8 font-body text-body-sm text-text-muted">
+            New here?{' '}
             <Link
               to="/signup"
-              className="font-medium text-accent hover:text-accent-hover transition-colors duration-200"
+              className="font-medium text-accent transition-colors hover:text-accent-hover"
             >
-              Sign up
+              Create an account
             </Link>
           </p>
-        </Card>
-      </FadeInUp>
+        </FadeInUp>
+      </div>
+
+      {/* Photo panel — full bleed, sharp edges */}
+      <div className="relative hidden lg:col-span-7 lg:block">
+        <TravelImage
+          src={SCENES.loginPanel}
+          alt="A quiet European street corner in the morning"
+          fallbackSeed="login"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-primary/70 via-primary/10 to-transparent" />
+        <figure className="absolute bottom-12 left-12 right-12 max-w-lg">
+          <blockquote className="font-display text-3xl italic leading-snug text-background">
+            “We travel not to escape life, but for life not to escape us.”
+          </blockquote>
+          <figcaption className="kicker mt-4 !text-background/70">
+            Pinned above someone’s desk, probably
+          </figcaption>
+        </figure>
+      </div>
     </main>
   );
 }

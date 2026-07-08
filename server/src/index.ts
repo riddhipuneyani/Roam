@@ -3,6 +3,8 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import authRoutes from './routes/auth.js';
+import tripRoutes from './routes/trips.js';
+import generateRoutes from './routes/generate.js';
 
 const app = express();
 
@@ -31,6 +33,8 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/trips', tripRoutes);
+app.use('/api/generate', generateRoutes);
 
 app.use(
   (
