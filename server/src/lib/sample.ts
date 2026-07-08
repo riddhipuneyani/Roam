@@ -9,7 +9,7 @@ import type {
 } from './itinerary.js';
 
 /**
- * Dev-only fallback used when OPENAI_API_KEY is empty, so the whole product
+ * Dev-only fallback used when GEMINI_API_KEY is empty, so the whole product
  * flow can be exercised without a key. The server logs loudly whenever this
  * is used. The data below is a real, realistic Lisbon itinerary bank; for
  * other destinations the place names stay honest about being samples.

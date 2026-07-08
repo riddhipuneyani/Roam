@@ -6,7 +6,7 @@ A calm, editorial travel planning platform. Answer a handful of quiet questions 
 
 - Node.js 20+
 - Docker Desktop (for PostgreSQL — must be running before `npm run db:up`)
-- An OpenAI API key (optional in dev — see below)
+- A Gemini API key (optional in dev — see below)
 
 ## Quick start
 
@@ -33,8 +33,10 @@ npm run dev
 
 ## Itinerary generation
 
-Set `OPENAI_API_KEY` in `server/.env` for real generation (`OPENAI_MODEL` defaults to
-`gpt-4o-mini`). The key is used **server-side only** and never reaches the client.
+Generation runs on Google's Gemini API through its OpenAI-compatible endpoint (the
+`openai` SDK stays, pointed at `generativelanguage.googleapis.com`). Set
+`GEMINI_API_KEY` in `server/.env` for real generation (`GEMINI_MODEL` defaults to
+`gemini-2.5-flash`). The key is used **server-side only** and never reaches the client.
 
 **No key?** In dev the server falls back to a built-in sample itinerary (a realistic
 Lisbon plan; other destinations are labeled "(sample data)") so the entire product

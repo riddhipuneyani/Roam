@@ -10,7 +10,7 @@ import {
   validateSingleActivity,
   validateSingleRestaurant,
 } from './itinerary.js';
-import { GenerationError, chatJson, isOpenAiConfigured } from './openai.js';
+import { GenerationError, chatJson, isGenerationConfigured } from './openai.js';
 import {
   destinationsSystemPrompt,
   destinationsUserPrompt,
@@ -31,7 +31,7 @@ import {
 
 function logSampleMode(what: string): void {
   console.warn(
-    `[roam] OPENAI_API_KEY is empty — serving built-in SAMPLE ${what} (dev only). ` +
+    `[roam] GEMINI_API_KEY is empty — serving built-in SAMPLE ${what} (dev only). ` +
       'Set the key in server/.env for real generation.',
   );
 }
@@ -66,7 +66,7 @@ export async function generateItinerary(
   destination: string,
   preferences: TripPreferences,
 ): Promise<Itinerary> {
-  if (!isOpenAiConfigured()) {
+  if (!isGenerationConfigured()) {
     logSampleMode('itinerary');
     return sampleItinerary(destination, preferences);
   }
@@ -81,7 +81,7 @@ export async function generateItinerary(
 export async function generateDestinations(
   preferences: TripPreferences,
 ): Promise<DestinationOption[]> {
-  if (!isOpenAiConfigured()) {
+  if (!isGenerationConfigured()) {
     logSampleMode('destination options');
     return sampleDestinations(preferences);
   }
@@ -99,7 +99,7 @@ export async function regenerateActivity(
   dayNumber: number,
   slot: ActivitySlot,
 ): Promise<ActivityBlock> {
-  if (!isOpenAiConfigured()) {
+  if (!isGenerationConfigured()) {
     logSampleMode(`${slot} activity`);
     return sampleActivity(slot, preferences);
   }
@@ -118,7 +118,7 @@ export async function regenerateRestaurant(
   restaurantIndex: number,
 ): Promise<RestaurantRec> {
   const current = itinerary.days[dayNumber - 1].restaurants[restaurantIndex];
-  if (!isOpenAiConfigured()) {
+  if (!isGenerationConfigured()) {
     logSampleMode('restaurant');
     return sampleRestaurant(preferences, current.mealType);
   }
