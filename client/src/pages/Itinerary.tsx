@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AppNav } from '../components/AppNav';
 import { TravelImage } from '../components/TravelImage';
 import { Badge, Button, FadeInUp, Spinner } from '../components/ui';
+import { BudgetSection } from '../features/budget/BudgetSection';
 import { ApiRequestError, generateApi, tripsApi } from '../lib/api';
 import { destinationImage } from '../lib/images';
 import type { ActivityBlock, ActivitySlot, RestaurantRec, Trip } from '../lib/types';
@@ -388,6 +389,15 @@ export function Itinerary() {
           <button
             type="button"
             onClick={() =>
+              document.getElementById('budget-section')?.scrollIntoView({ behavior: 'smooth' })
+            }
+            className="whitespace-nowrap border-b-2 border-transparent px-4 py-4 font-body text-body-sm text-text-muted transition-colors hover:text-text-primary"
+          >
+            <span className="font-display italic">The ledger</span>
+          </button>
+          <button
+            type="button"
+            onClick={() =>
               document.getElementById('closing-spread')?.scrollIntoView({ behavior: 'smooth' })
             }
             className="whitespace-nowrap border-b-2 border-transparent px-4 py-4 font-body text-body-sm text-text-muted transition-colors hover:text-text-primary"
@@ -476,8 +486,11 @@ export function Itinerary() {
           );
         })}
 
+        {/* ------------------------------ the ledger ------------------------------ */}
+        <BudgetSection trip={trip} />
+
         {/* ------------------------------ closing spread ------------------------------ */}
-        <section id="closing-spread" className="scroll-mt-16 py-16">
+        <section id="closing-spread" className="scroll-mt-16 border-t border-border/70 py-16">
           <p className="kicker-accent">Before you go</p>
           <h2 className="mt-3 font-display text-display-md">The practical part</h2>
 

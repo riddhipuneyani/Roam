@@ -78,6 +78,54 @@ export interface Trip {
   updatedAt: string;
 }
 
+export type ExpenseCategory =
+  | 'accommodation'
+  | 'food'
+  | 'activity'
+  | 'transport'
+  | 'shopping'
+  | 'other';
+
+export interface TripExpense {
+  id: string;
+  tripId: string;
+  category: ExpenseCategory;
+  label: string;
+  /** Prisma Decimal serializes as a string. */
+  amount: string;
+  currency: string;
+  date: string;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface BudgetCategoryBreakdown {
+  category: ExpenseCategory;
+  actual: number;
+  count: number;
+}
+
+export interface BudgetSummary {
+  displayCurrency: string;
+  rateDate: string;
+  budgetTier: BudgetTier | null;
+  plannedBudget: number | null;
+  estimatedTotal: number | null;
+  actualTotal: number;
+  remaining: number | null;
+  expenseCount: number;
+  byCategory: BudgetCategoryBreakdown[];
+}
+
+export interface ExpenseInput {
+  category: ExpenseCategory;
+  label: string;
+  amount: number;
+  currency: string;
+  date: string;
+  notes?: string;
+}
+
 export interface TripSummary {
   id: string;
   title: string;

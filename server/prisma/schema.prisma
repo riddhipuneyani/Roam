@@ -17,16 +17,41 @@ model User {
 }
 
 model Trip {
-  id          String   @id @default(cuid())
+  id          String        @id @default(cuid())
   userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   title       String
   destination String
-  status      String   @default("draft")
+  status      String        @default("draft")
   preferences Json
   itinerary   Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  expenses    TripExpense[]
 
   @@index([userId])
+}
+
+enum ExpenseCategory {
+  accommodation
+  food
+  activity
+  transport
+  shopping
+  other
+}
+
+model TripExpense {
+  id        String          @id @default(cuid())
+  tripId    String
+  trip      Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  category  ExpenseCategory
+  label     String
+  amount    Decimal         @db.Decimal(12, 2)
+  currency  String          @db.Char(3)
+  date      DateTime
+  notes     String?
+  createdAt DateTime        @default(now())
+
+  @@index([tripId])
 }

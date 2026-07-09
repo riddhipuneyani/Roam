@@ -5,6 +5,9 @@ import cookieParser from 'cookie-parser';
 import authRoutes from './routes/auth.js';
 import tripRoutes from './routes/trips.js';
 import generateRoutes from './routes/generate.js';
+import expenseRoutes from './routes/expenses.js';
+import budgetRoutes from './routes/budget.js';
+import currencyRoutes from './routes/currency.js';
 
 const app = express();
 
@@ -33,8 +36,11 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/trips/:tripId/expenses', expenseRoutes);
+app.use('/api/trips/:tripId/budget', budgetRoutes);
 app.use('/api/trips', tripRoutes);
 app.use('/api/generate', generateRoutes);
+app.use('/api/currency', currencyRoutes);
 
 app.use(
   (

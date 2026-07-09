@@ -1,7 +1,10 @@
 import type {
   ActivitySlot,
+  BudgetSummary,
   DestinationOption,
+  ExpenseInput,
   Trip,
+  TripExpense,
   TripPreferences,
   TripSummary,
 } from './types';
@@ -118,6 +121,36 @@ export const tripsApi = {
       method: 'POST',
       body: JSON.stringify({ dayNumber, slot: 'restaurant', restaurantIndex }),
     }),
+};
+
+export const expensesApi = {
+  list: (tripId: string) =>
+    apiRequest<{ expenses: TripExpense[] }>(`/api/trips/${tripId}/expenses`),
+
+  create: (tripId: string, input: ExpenseInput) =>
+    apiRequest<{ expense: TripExpense }>(`/api/trips/${tripId}/expenses`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  update: (tripId: string, expenseId: string, input: ExpenseInput) =>
+    apiRequest<{ expense: TripExpense }>(`/api/trips/${tripId}/expenses/${expenseId}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+
+  remove: (tripId: string, expenseId: string) =>
+    apiRequest<{ message: string }>(`/api/trips/${tripId}/expenses/${expenseId}`, {
+      method: 'DELETE',
+    }),
+};
+
+export const budgetApi = {
+  summary: (tripId: string, currency: string) =>
+    apiRequest<BudgetSummary>(`/api/trips/${tripId}/budget?currency=${encodeURIComponent(currency)}`),
+
+  currencies: () =>
+    apiRequest<{ currencies: Record<string, string> }>('/api/currency/currencies'),
 };
 
 export const generateApi = {
