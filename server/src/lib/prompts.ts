@@ -61,7 +61,8 @@ Hard requirements:
 - 2-3 restaurants per day, matched to the stated food preferences.
 - "estimatedCost" strings like "$18", "Free", or "$40 for two" — consistent with the budget tier.
 - Descriptions are 2-3 sentences. Real place names only; if unsure a place still operates, choose a safer well-known alternative.
-- Pace the days realistically: cluster activities by neighborhood, don't zig-zag across the city.`;
+- Pace the days realistically: cluster activities by neighborhood, don't zig-zag across the city.
+- NEVER repeat yourself across the trip: every activity (morning/afternoon/evening) and every restaurant must appear exactly once in the whole itinerary. Before finishing, re-read all ${days} days and replace any repeated activity or restaurant with a different real one.`;
 }
 
 export function itineraryUserPrompt(
@@ -101,13 +102,21 @@ The traveler has not chosen a destination. Respond with ONLY a JSON object:
 Hard requirements:
 - Exactly 4 options, varied in region and character.
 - Each rationale must reference the traveler's stated vibe, budget tier, companions, or interests — not generic praise of the destination.
-- Favor destinations that are realistic for the stated budget tier and trip length (consider travel time).`;
+- Favor destinations that are realistic for the stated budget tier and trip length (consider travel time).
+- If the request lists destinations the traveler has already seen, do NOT suggest any of them again — return four genuinely different places, not near-identical neighbors of the rejected ones.`;
 }
 
-export function destinationsUserPrompt(preferences: TripPreferences): string {
+export function destinationsUserPrompt(
+  preferences: TripPreferences,
+  exclude: string[] = [],
+): string {
+  const exclusionNote =
+    exclude.length > 0
+      ? `\n\nThe traveler has already seen these destinations and passed on them — do not suggest any of them again:\n${exclude.join(', ')}`
+      : '';
   return `Suggest destinations for this traveler:
 
-${describePreferences(preferences)}
+${describePreferences(preferences)}${exclusionNote}
 
 Return the JSON object only.`;
 }

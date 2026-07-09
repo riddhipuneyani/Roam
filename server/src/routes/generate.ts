@@ -28,8 +28,17 @@ router.post(
       return;
     }
 
+    // Destinations already shown to the traveler in earlier rounds.
+    const exclude: string[] = Array.isArray(req.body?.exclude)
+      ? req.body.exclude
+          .filter((item: unknown): item is string => typeof item === 'string')
+          .map((item: string) => item.trim())
+          .filter(Boolean)
+          .slice(0, 40)
+      : [];
+
     try {
-      const options = await generateDestinations(parsed.value);
+      const options = await generateDestinations(parsed.value, exclude);
       res.json({ options });
     } catch (error) {
       if (error instanceof GenerationError) {

@@ -50,7 +50,24 @@ async function generateValidated<T>(
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const prompt = attempt === 0 ? user : user + retryNote(lastErrors);
-    const raw = await chatJson(system, prompt, temperature);
+
+    let raw: unknown;
+    try {
+      raw = await chatJson(system, prompt, temperature);
+    } catch (error) {
+      // Malformed/truncated JSON burns a retry too, with a targeted note.
+      // Provider errors (rate limits, outages) are not retried here — the
+      // SDK already backed off, and a corrective prompt can't fix a 429.
+      if (error instanceof GenerationError && error.kind === 'parse' && attempt === 0) {
+        lastErrors = [
+          'the previous response was not valid JSON (possibly truncated or wrapped in commentary) — respond with the complete, well-formed JSON object and nothing else',
+        ];
+        console.warn(`[roam] generation attempt 1 returned malformed JSON: ${error.message} — retrying`);
+        continue;
+      }
+      throw error;
+    }
+
     const result = validate(raw);
     if (result.ok) {
       return result.value;
@@ -80,15 +97,16 @@ export async function generateItinerary(
 
 export async function generateDestinations(
   preferences: TripPreferences,
+  exclude: string[] = [],
 ): Promise<DestinationOption[]> {
   if (!isGenerationConfigured()) {
     logSampleMode('destination options');
-    return sampleDestinations(preferences);
+    return sampleDestinations(preferences, exclude);
   }
   return generateValidated(
     destinationsSystemPrompt(),
-    destinationsUserPrompt(preferences),
-    validateDestinationOptions,
+    destinationsUserPrompt(preferences, exclude),
+    (value) => validateDestinationOptions(value, exclude),
     0.9,
   );
 }

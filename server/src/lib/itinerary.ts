@@ -159,6 +159,50 @@ function validateDay(
   checkString(value, 'tip', path, errors);
 }
 
+const normalizeName = (name: string): string =>
+  name.trim().toLowerCase().replace(/\s+/g, ' ');
+
+/**
+ * A trip must never suggest the same activity or restaurant twice, on any
+ * day. Returns retry-prompt-ready error strings naming each duplication.
+ */
+function findCrossTripDuplicates(itinerary: Itinerary): string[] {
+  const errors: string[] = [];
+
+  const seenActivities = new Map<string, string>();
+  const seenRestaurants = new Map<string, string>();
+
+  for (const day of itinerary.days) {
+    for (const slot of ['morning', 'afternoon', 'evening'] as const) {
+      const name = normalizeName(day[slot].activity);
+      const where = `day ${day.dayNumber} ${slot}`;
+      const firstUse = seenActivities.get(name);
+      if (firstUse) {
+        errors.push(
+          `duplicate activity: "${day[slot].activity}" at ${where} was already suggested at ${firstUse} — every activity must appear only once in the whole trip; replace the later one with a different real activity`,
+        );
+      } else {
+        seenActivities.set(name, where);
+      }
+    }
+
+    day.restaurants.forEach((restaurant, i) => {
+      const name = normalizeName(restaurant.name);
+      const where = `day ${day.dayNumber} restaurants[${i}]`;
+      const firstUse = seenRestaurants.get(name);
+      if (firstUse) {
+        errors.push(
+          `duplicate restaurant: "${restaurant.name}" at ${where} was already recommended at ${firstUse} — every restaurant must appear only once in the whole trip; replace the later one with a different real restaurant`,
+        );
+      } else {
+        seenRestaurants.set(name, where);
+      }
+    });
+  }
+
+  return errors;
+}
+
 export function validateItinerary(
   value: unknown,
   expectedDays: number,
@@ -188,10 +232,20 @@ export function validateItinerary(
   if (errors.length > 0) {
     return { ok: false, errors };
   }
+
+  // Structure is sound — now enforce uniqueness across the whole trip.
+  const duplicates = findCrossTripDuplicates(value as unknown as Itinerary);
+  if (duplicates.length > 0) {
+    return { ok: false, errors: duplicates };
+  }
+
   return { ok: true, value: value as unknown as Itinerary };
 }
 
-export function validateDestinationOptions(value: unknown): Result<DestinationOption[]> {
+export function validateDestinationOptions(
+  value: unknown,
+  exclude: string[] = [],
+): Result<DestinationOption[]> {
   const errors: string[] = [];
 
   if (!isRecord(value) || !Array.isArray(value.options)) {
@@ -214,7 +268,30 @@ export function validateDestinationOptions(value: unknown): Result<DestinationOp
   if (errors.length > 0) {
     return { ok: false, errors };
   }
-  return { ok: true, value: value.options as unknown as DestinationOption[] };
+
+  // No repeats within the set, and nothing the traveler was already shown.
+  const options = value.options as unknown as DestinationOption[];
+  const excluded = new Set(exclude.map(normalizeName));
+  const seen = new Set<string>();
+  for (const option of options) {
+    const name = normalizeName(option.name);
+    if (seen.has(name)) {
+      errors.push(
+        `"${option.name}" appears more than once in options — every option must be a different destination`,
+      );
+    }
+    seen.add(name);
+    if (excluded.has(name)) {
+      errors.push(
+        `"${option.name}" was already shown to the traveler earlier — it must not be suggested again; pick a genuinely different destination`,
+      );
+    }
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+  return { ok: true, value: options };
 }
 
 export function validateSingleActivity(value: unknown): Result<ActivityBlock> {

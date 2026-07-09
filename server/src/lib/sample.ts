@@ -190,15 +190,33 @@ export function sampleItinerary(
   };
 }
 
-export function sampleDestinations(preferences: TripPreferences): DestinationOption[] {
+export function sampleDestinations(
+  preferences: TripPreferences,
+  exclude: string[] = [],
+): DestinationOption[] {
   const why = (fit: string) =>
     `${fit} A strong match for ${preferences.vibe.join(' + ')} at a ${preferences.budgetTier} budget over ${preferences.duration} days.`;
-  return [
+  const bank: DestinationOption[] = [
     { name: 'Lisbon', country: 'Portugal', rationale: why('Hills, tiled facades, and Europe’s best-value food scene.') },
     { name: 'Kyoto', country: 'Japan', rationale: why('Temples, tea houses and gardens built for slow mornings.') },
     { name: 'Oaxaca', country: 'Mexico', rationale: why('Markets, mezcal and the most celebrated food culture in the Americas.') },
     { name: 'Ljubljana', country: 'Slovenia', rationale: why('A calm riverside capital with alps and caves within an hour.') },
+    { name: 'Porto', country: 'Portugal', rationale: why('Ribeira lanes, port lodges and Atlantic light — Lisbon’s quieter sibling.') },
+    { name: 'Hanoi', country: 'Vietnam', rationale: why('Street kitchens, lakeside mornings and easy escapes into limestone country.') },
+    { name: 'Tbilisi', country: 'Georgia', rationale: why('Sulfur baths, supra feasts and a wine tradition eight thousand years deep.') },
+    { name: 'Valencia', country: 'Spain', rationale: why('Paella at its source, a dry riverbed turned park, and beach afternoons.') },
+    { name: 'Chiang Mai', country: 'Thailand', rationale: why('Temple mornings, night markets and mountain air at gentle prices.') },
+    { name: 'Kraków', country: 'Poland', rationale: why('A storybook old town with serious coffee and pierogi worth the queue.') },
+    { name: 'Taipei', country: 'Taiwan', rationale: why('Night markets, hot springs and mountain trails on the metro line.') },
+    { name: 'Montevideo', country: 'Uruguay', rationale: why('Rambla sunsets, parrilla smoke and a city that refuses to hurry.') },
   ];
+
+  const excluded = new Set(exclude.map((name) => name.trim().toLowerCase()));
+  const fresh = bank.filter((option) => !excluded.has(option.name.toLowerCase()));
+  // Dev-only fallback: if the traveler has shuffled past the whole bank,
+  // recycle rather than return an invalid short list.
+  const pool = fresh.length >= 4 ? fresh : [...fresh, ...bank.filter((o) => !fresh.includes(o))];
+  return pool.slice(0, 4);
 }
 
 export function sampleActivity(

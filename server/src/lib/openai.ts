@@ -18,15 +18,20 @@ function getClient(): OpenAI {
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY is not set');
     }
-    client = new OpenAI({ apiKey, baseURL: GEMINI_BASE_URL });
+    // The SDK already backs off and retries 429/5xx; give it a bit more room.
+    client = new OpenAI({ apiKey, baseURL: GEMINI_BASE_URL, maxRetries: 3 });
   }
   return client;
 }
 
 export class GenerationError extends Error {
-  constructor(message: string) {
+  /** 'parse' failures are worth one retry with a corrective note; 'provider' failures are not. */
+  readonly kind: 'parse' | 'provider';
+
+  constructor(message: string, kind: 'parse' | 'provider' = 'parse') {
     super(message);
     this.name = 'GenerationError';
+    this.kind = kind;
   }
 }
 
@@ -51,17 +56,37 @@ export async function chatJson(
 ): Promise<unknown> {
   const model = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash';
 
-  const completion = await getClient().chat.completions.create({
+  let completion;
+  try {
+    completion = await getClient().chat.completions.create({
     model,
     temperature,
     response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ],
-  });
+    // Gemini 2.5 models spend "thinking" tokens from the output budget; a
+    // long multi-day itinerary needs generous headroom or the JSON truncates.
+    max_completion_tokens: 32768,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+    });
+  } catch (error) {
+    // Provider errors (rate limits, outages) must surface as the friendly
+    // GenerationError path, never a raw 500.
+    if (error instanceof OpenAI.APIError) {
+      console.error(`[roam] Gemini API error ${error.status ?? 'unknown'}: ${error.message}`);
+      throw new GenerationError(
+        error.status === 429
+          ? 'The itinerary service is briefly over capacity'
+          : 'The itinerary service had a hiccup',
+        'provider',
+      );
+    }
+    throw error;
+  }
 
-  const content = completion.choices[0]?.message?.content;
+  const choice = completion.choices[0];
+  const content = choice?.message?.content;
   if (!content) {
     throw new GenerationError('The model returned an empty response');
   }
@@ -69,6 +94,7 @@ export async function chatJson(
   try {
     return JSON.parse(extractJson(content));
   } catch {
-    throw new GenerationError('The model returned malformed JSON');
+    const finish = choice?.finish_reason ?? 'unknown';
+    throw new GenerationError(`The model returned malformed JSON (finish_reason: ${finish})`);
   }
 }

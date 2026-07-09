@@ -53,6 +53,7 @@ export function Plan() {
   const [direction, setDirection] = useState(1);
   const [answers, setAnswers] = useState<OnboardingAnswers>(EMPTY_ANSWERS);
   const [options, setOptions] = useState<DestinationOption[] | null>(null);
+  const [seenDestinations, setSeenDestinations] = useState<string[]>([]);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
   const [failedTripId, setFailedTripId] = useState<string | null>(null);
   const [failureMessage, setFailureMessage] = useState<string>('');
@@ -142,13 +143,18 @@ export function Plan() {
     }
   }
 
-  async function discover() {
+  async function discover(reset: boolean) {
     setPhase('discover');
     setOptions(null);
     setDiscoverError(null);
+    const exclude = reset ? [] : seenDestinations;
     try {
-      const { options: found } = await generateApi.destinations(buildPreferences(answers));
+      const { options: found } = await generateApi.destinations(
+        buildPreferences(answers),
+        exclude,
+      );
       setOptions(found);
+      setSeenDestinations([...exclude, ...found.map((option) => option.name)]);
     } catch (err) {
       setDiscoverError(
         err instanceof ApiRequestError
@@ -167,7 +173,7 @@ export function Plan() {
     if (answers.destinationKnown) {
       void craft();
     } else {
-      void discover();
+      void discover(true);
     }
   }
 
@@ -289,7 +295,7 @@ export function Plan() {
             <p className="border-l-2 border-accent bg-accent-muted/15 px-4 py-3 font-body text-body-sm text-accent-hover">
               {discoverError}
             </p>
-            <Button className="mt-6" onClick={() => void discover()}>
+            <Button className="mt-6" onClick={() => void discover(false)}>
               Try again
             </Button>
           </div>
@@ -329,7 +335,7 @@ export function Plan() {
             </div>
             <button
               type="button"
-              onClick={() => void discover()}
+              onClick={() => void discover(false)}
               className="mt-12 font-body text-body-sm text-text-muted underline decoration-border-strong underline-offset-4 hover:text-text-primary"
             >
               None of these — show me different places

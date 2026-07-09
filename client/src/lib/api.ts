@@ -121,10 +121,10 @@ export const tripsApi = {
 };
 
 export const generateApi = {
-  destinations: (preferences: TripPreferences) =>
+  destinations: (preferences: TripPreferences, exclude: string[] = []) =>
     apiRequest<{ options: DestinationOption[] }>('/api/generate/destinations', {
       method: 'POST',
-      body: JSON.stringify({ preferences }),
+      body: JSON.stringify({ preferences, exclude }),
     }),
 
   itinerary: (preferences: TripPreferences) =>
