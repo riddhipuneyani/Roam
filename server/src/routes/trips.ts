@@ -156,7 +156,10 @@ router.post(
       if (error instanceof GenerationError) {
         console.error('[roam] regeneration failed:', error.message);
         res.status(502).json({
-          error: 'We couldn’t find a fresh alternative just now. The current pick is untouched — try again in a moment.',
+          error:
+            error.kind === 'provider'
+              ? error.message
+              : 'We couldn’t find a fresh alternative just now. The current pick is untouched — try again in a moment.',
         });
         return;
       }

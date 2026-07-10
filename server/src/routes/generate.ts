@@ -44,7 +44,10 @@ router.post(
       if (error instanceof GenerationError) {
         console.error('[roam] destination generation failed:', error.message);
         res.status(502).json({
-          error: 'We couldn’t gather destination ideas just now. Please try again in a moment.',
+          error:
+            error.kind === 'provider'
+              ? error.message
+              : 'We couldn’t gather destination ideas just now. Please try again in a moment.',
         });
         return;
       }
@@ -121,7 +124,10 @@ router.post(
       if (error instanceof GenerationError) {
         console.error('[roam] itinerary generation failed:', error.message);
         // Keep the draft so the traveler can retry from the dashboard.
-        res.status(502).json({ error: FRIENDLY_FAILURE, tripId });
+        res.status(502).json({
+          error: error.kind === 'provider' ? error.message : FRIENDLY_FAILURE,
+          tripId,
+        });
         return;
       }
       throw error;

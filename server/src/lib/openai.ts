@@ -1,31 +1,95 @@
 import OpenAI from 'openai';
 
 /**
- * Itinerary generation runs on Google's Gemini API through its
- * OpenAI-compatible endpoint, so the openai SDK is still the client.
+ * Provider-selection layer for generation calls.
+ *
+ * An ordered chain of OpenAI-compatible providers is tried in turn; when one
+ * is unavailable (quota/rate limit, timeout, outage, bad model) the next is
+ * tried automatically. Validation and retry logic upstream never sees which
+ * provider actually served a request — this layer only decides who answers.
+ *
+ * Configure with GENERATION_CHAIN, a comma-separated list of provider:model
+ * entries, e.g. "gemini:gemini-2.5-flash,gemini:gemini-2.5-flash-lite,groq:llama-3.3-70b-versatile".
+ * Entries whose provider has no API key in the environment are skipped.
  */
-const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/';
 
-let client: OpenAI | null = null;
+const PROVIDERS: Record<
+  string,
+  { baseURL: string; keyEnv: string; maxCompletionTokens: number }
+> = {
+  gemini: {
+    baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+    keyEnv: 'GEMINI_API_KEY',
+    // Gemini 2.5 thinking tokens spend from the output budget — long
+    // multi-day itineraries truncate without generous headroom.
+    maxCompletionTokens: 32768,
+  },
+  groq: {
+    baseURL: 'https://api.groq.com/openai/v1',
+    keyEnv: 'GROQ_API_KEY',
+    // Groq counts the requested output budget toward its per-minute token
+    // limit (12k TPM on the free tier) — ask only for what the JSON needs.
+    maxCompletionTokens: 8192,
+  },
+};
 
-export function isGenerationConfigured(): boolean {
-  return Boolean(process.env.GEMINI_API_KEY);
+interface ChainEntry {
+  provider: string;
+  model: string;
+  label: string; // "gemini:gemini-2.5-flash", for logs
 }
 
-function getClient(): OpenAI {
-  if (!client) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is not set');
+function defaultChain(): string {
+  const primaryModel = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash';
+  const entries = [`gemini:${primaryModel}`];
+  if (primaryModel !== 'gemini-2.5-flash-lite') {
+    entries.push('gemini:gemini-2.5-flash-lite');
+  }
+  entries.push('groq:llama-3.3-70b-versatile');
+  return entries.join(',');
+}
+
+/** The configured chain, keeping only entries whose provider has a key. */
+export function generationChain(): ChainEntry[] {
+  const raw = process.env.GENERATION_CHAIN ?? defaultChain();
+  const entries: ChainEntry[] = [];
+  for (const item of raw.split(',')) {
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+    const colon = trimmed.indexOf(':');
+    const provider = colon === -1 ? trimmed : trimmed.slice(0, colon);
+    const model = colon === -1 ? '' : trimmed.slice(colon + 1);
+    const spec = PROVIDERS[provider];
+    if (!spec || !model) {
+      console.warn(`[roam] ignoring malformed GENERATION_CHAIN entry: "${trimmed}"`);
+      continue;
     }
-    // The SDK already backs off and retries 429/5xx; give it a bit more room.
-    client = new OpenAI({ apiKey, baseURL: GEMINI_BASE_URL, maxRetries: 3 });
+    if (!process.env[spec.keyEnv]) continue; // no key — skip silently
+    entries.push({ provider, model, label: `${provider}:${model}` });
+  }
+  return entries;
+}
+
+export function isGenerationConfigured(): boolean {
+  return generationChain().length > 0;
+}
+
+const clients = new Map<string, OpenAI>();
+
+function clientFor(provider: string): OpenAI {
+  let client = clients.get(provider);
+  if (!client) {
+    const spec = PROVIDERS[provider];
+    client = new OpenAI({
+      apiKey: process.env[spec.keyEnv],
+      baseURL: spec.baseURL,
+    });
+    clients.set(provider, client);
   }
   return client;
 }
 
 export class GenerationError extends Error {
-  /** 'parse' failures are worth one retry with a corrective note; 'provider' failures are not. */
   readonly kind: 'parse' | 'provider';
 
   constructor(message: string, kind: 'parse' | 'provider' = 'parse') {
@@ -36,8 +100,8 @@ export class GenerationError extends Error {
 }
 
 /**
- * Some Gemini responses arrive fenced (```json ... ```) even in JSON mode —
- * strip the fence before parsing rather than assuming OpenAI's exact shape.
+ * Some models emit fenced JSON (```json ... ```) even in JSON mode —
+ * strip the fence before parsing rather than assuming one exact shape.
  */
 function extractJson(content: string): string {
   const trimmed = content.trim();
@@ -45,56 +109,85 @@ function extractJson(content: string): string {
   return fenced ? fenced[1] : trimmed;
 }
 
+function describeFailure(error: unknown): string {
+  if (error instanceof OpenAI.APIError) {
+    return `${error.status ?? 'API'} ${error.message}`.slice(0, 200);
+  }
+  if (error instanceof Error) return error.message.slice(0, 200);
+  return String(error).slice(0, 200);
+}
+
+const REQUEST_TIMEOUT_MS = Number(process.env.GENERATION_TIMEOUT_MS) || 120_000;
+
 /**
- * Send a system + user prompt pair and parse the JSON response.
- * Throws GenerationError when the response is not parseable JSON.
+ * Send a system + user prompt pair through the provider chain and parse the
+ * JSON response. Provider failures (rate limits, timeouts, outages) advance
+ * the chain; only when every provider fails does the caller see an error.
+ * Malformed JSON from a healthy provider throws a 'parse' GenerationError so
+ * the upstream validation retry can ask for a corrected response.
  */
 export async function chatJson(
   system: string,
   user: string,
   temperature = 0.7,
 ): Promise<unknown> {
-  const model = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash';
+  const chain = generationChain();
+  if (chain.length === 0) {
+    throw new GenerationError('No generation provider is configured', 'provider');
+  }
 
-  let completion;
-  try {
-    completion = await getClient().chat.completions.create({
-    model,
-    temperature,
-    response_format: { type: 'json_object' },
-    // Gemini 2.5 models spend "thinking" tokens from the output budget; a
-    // long multi-day itinerary needs generous headroom or the JSON truncates.
-    max_completion_tokens: 32768,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    });
-  } catch (error) {
-    // Provider errors (rate limits, outages) must surface as the friendly
-    // GenerationError path, never a raw 500.
-    if (error instanceof OpenAI.APIError) {
-      console.error(`[roam] Gemini API error ${error.status ?? 'unknown'}: ${error.message}`);
+  let lastFailure = '';
+  for (const entry of chain) {
+    let completion;
+    try {
+      completion = await clientFor(entry.provider).chat.completions.create(
+        {
+          model: entry.model,
+          temperature,
+          response_format: { type: 'json_object' },
+          max_completion_tokens: PROVIDERS[entry.provider].maxCompletionTokens,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+        },
+        { timeout: REQUEST_TIMEOUT_MS },
+      );
+    } catch (error) {
+      // Any provider-side failure (429 quota, 5xx, timeout, bad model,
+      // revoked key) means this provider can't serve us right now — the next
+      // one in the chain might. A repeat call here would fail identically.
+      lastFailure = describeFailure(error);
+      const position = chain.indexOf(entry);
+      const next = chain[position + 1];
+      console.warn(
+        `[roam] ${entry.label} unavailable (${lastFailure})${next ? ` — trying ${next.label}` : ' — chain exhausted'}`,
+      );
+      continue;
+    }
+
+    const choice = completion.choices[0];
+    const content = choice?.message?.content;
+    if (!content) {
       throw new GenerationError(
-        error.status === 429
-          ? 'The itinerary service is briefly over capacity'
-          : 'The itinerary service had a hiccup',
-        'provider',
+        `The model returned an empty response (served by ${entry.label})`,
       );
     }
-    throw error;
+
+    console.log(`[roam] generation served by ${entry.label}`);
+    try {
+      return JSON.parse(extractJson(content));
+    } catch {
+      const finish = choice?.finish_reason ?? 'unknown';
+      throw new GenerationError(
+        `The model returned malformed JSON (served by ${entry.label}, finish_reason: ${finish})`,
+      );
+    }
   }
 
-  const choice = completion.choices[0];
-  const content = choice?.message?.content;
-  if (!content) {
-    throw new GenerationError('The model returned an empty response');
-  }
-
-  try {
-    return JSON.parse(extractJson(content));
-  } catch {
-    const finish = choice?.finish_reason ?? 'unknown';
-    throw new GenerationError(`The model returned malformed JSON (finish_reason: ${finish})`);
-  }
+  console.error(`[roam] every generation provider failed; last error: ${lastFailure}`);
+  throw new GenerationError(
+    'We’ve hit today’s planning limit — every source we use is busy. Please try again in a little while.',
+    'provider',
+  );
 }

@@ -33,10 +33,18 @@ npm run dev
 
 ## Itinerary generation
 
-Generation runs on Google's Gemini API through its OpenAI-compatible endpoint (the
-`openai` SDK stays, pointed at `generativelanguage.googleapis.com`). Set
-`GEMINI_API_KEY` in `server/.env` for real generation (`GEMINI_MODEL` defaults to
-`gemini-2.5-flash`). The key is used **server-side only** and never reaches the client.
+Generation runs through a chain of OpenAI-compatible providers, tried in order until
+one answers. The default chain is:
+
+1. Gemini `gemini-2.5-flash` (`GEMINI_API_KEY`)
+2. Gemini `gemini-2.5-flash-lite` (same key, separate quota bucket)
+3. Groq `llama-3.3-70b-versatile` (`GROQ_API_KEY`, via `api.groq.com/openai/v1`)
+
+A quota/rate-limit error, timeout, or outage falls through to the next entry; entries
+whose provider has no key are skipped, and the server logs which provider served each
+request. Only when the whole chain fails does the user see a "we've hit today's limit"
+message. Customize the order with `GENERATION_CHAIN` (see `server/.env.example`).
+All keys are used **server-side only** and never reach the client.
 
 **No key?** In dev the server falls back to a built-in sample itinerary (a realistic
 Lisbon plan; other destinations are labeled "(sample data)") so the entire product

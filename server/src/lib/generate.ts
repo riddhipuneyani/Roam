@@ -31,8 +31,8 @@ import {
 
 function logSampleMode(what: string): void {
   console.warn(
-    `[roam] GEMINI_API_KEY is empty — serving built-in SAMPLE ${what} (dev only). ` +
-      'Set the key in server/.env for real generation.',
+    `[roam] no generation provider has an API key — serving built-in SAMPLE ${what} (dev only). ` +
+      'Set GEMINI_API_KEY and/or GROQ_API_KEY in server/.env for real generation.',
   );
 }
 
