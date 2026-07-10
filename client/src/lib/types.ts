@@ -31,6 +31,9 @@ export interface ActivityBlock {
   why: string;
   estimatedCost: string;
   location: string;
+  /** Geocoded server-side; absent/null on older trips or unmapped places. */
+  lat?: number | null;
+  lon?: number | null;
 }
 
 export interface RestaurantRec {
@@ -39,6 +42,9 @@ export interface RestaurantRec {
   priceRange: string;
   mealType: string;
   why: string;
+  /** Real OSM coordinates when the pick is grounded. */
+  lat?: number | null;
+  lon?: number | null;
 }
 
 export interface ItineraryDay {

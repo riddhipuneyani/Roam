@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AppNav } from '../components/AppNav';
+import { DayMap } from '../components/DayMap';
 import { TravelImage } from '../components/TravelImage';
 import { Badge, Button, FadeInUp, Spinner } from '../components/ui';
 import { ApiRequestError, generateApi, tripsApi } from '../lib/api';
@@ -500,6 +501,8 @@ export function Itinerary() {
                         </div>
                       )}
                     </div>
+
+                    <DayMap day={day} />
 
                     <p className="mt-8 border-l-2 border-accent/60 pl-4 font-display text-base italic text-text-muted">
                       {day.tip}

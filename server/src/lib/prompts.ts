@@ -131,6 +131,126 @@ ${describePreferences(preferences)}${exclusionNote}
 Return the JSON object only.`;
 }
 
+/* --------------------------- grounded restaurants -------------------------- */
+
+export interface CandidateForPrompt {
+  name: string;
+  cuisine: string | null;
+  amenity: string;
+  distanceM: number;
+  nearestActivity: string;
+  walkMinutes: number;
+}
+
+export interface DayCandidatesForPrompt {
+  dayNumber: number;
+  candidates: CandidateForPrompt[];
+}
+
+function candidateLines(candidates: CandidateForPrompt[]): string {
+  return candidates
+    .map(
+      (c) =>
+        `- "${c.name}" (${c.amenity}${c.cuisine ? `, cuisine: ${c.cuisine}` : ''}) — about ${c.walkMinutes} min walk from ${c.nearestActivity}`,
+    )
+    .join('\n');
+}
+
+export function groundedRestaurantsSystemPrompt(currencyCode = 'INR'): string {
+  const sym = currencyCode === 'USD' ? '$' : '₹';
+  return `${TONE}
+
+You are choosing restaurants for an already-planned trip, from lists of REAL,
+verified places pulled from OpenStreetMap near each day's activities.
+
+Respond with ONLY a JSON object matching exactly:
+
+{
+  "days": [
+    {
+      "dayNumber": 1,
+      "restaurants": [{ "name": "string", "cuisine": "string", "priceRange": "string — e.g. \\"$$ · ~${sym}800/person\\"", "mealType": "string — breakfast/lunch/dinner", "why": "string" }]
+    }
+  ]
+}
+
+Hard requirements:
+- One entry per day, dayNumber 1..N, each with 2-3 restaurants.
+- For a day WITH a candidate list: pick ONLY from that day's candidates, copying the "name" EXACTLY as given. Never invent a place.
+- Never pick the same restaurant on more than one day of the trip.
+- "why" must reference the real proximity you were given ("a ${'{'}X{'}'} minute walk from …") AND the traveler's stated tastes/budget — this is now grounded data, use it.
+- Spread mealTypes sensibly across each day (breakfast/lunch/dinner), and estimate an honest priceRange in ${currencyCode} (${sym}) from the cuisine and setting.
+- For a day marked "(no verified places found nearby)": do NOT invent a specific restaurant name. Recommend honestly by area and cuisine instead — e.g. "A family-run trattoria along the harbourfront" — and say in "why" that it's a neighborhood pointer rather than a specific listing.`;
+}
+
+export function groundedRestaurantsUserPrompt(
+  itinerary: Itinerary,
+  preferences: TripPreferences,
+  dayCandidates: DayCandidatesForPrompt[],
+): string {
+  const dayBlocks = itinerary.days
+    .map((day) => {
+      const candidates = dayCandidates.find((d) => d.dayNumber === day.dayNumber)?.candidates ?? [];
+      const list =
+        candidates.length > 0
+          ? `Verified nearby places:\n${candidateLines(candidates)}`
+          : '(no verified places found nearby)';
+      return `Day ${day.dayNumber} — "${day.theme}"
+Activities: ${day.morning.activity} (${day.morning.location}); ${day.afternoon.activity} (${day.afternoon.location}); ${day.evening.activity} (${day.evening.location})
+${list}`;
+    })
+    .join('\n\n');
+
+  return `Trip: ${itinerary.destination} — ${itinerary.tripSummary}
+
+Traveler profile:
+${describePreferences(preferences)}
+
+${dayBlocks}
+
+Choose restaurants for every day. Return the JSON object only.`;
+}
+
+export function groundedRegenSystemPrompt(currencyCode = 'INR'): string {
+  const sym = currencyCode === 'USD' ? '$' : '₹';
+  return `${TONE}
+
+You are replacing ONE restaurant on an already-planned trip with a REAL,
+verified place from the candidate list provided (pulled from OpenStreetMap).
+
+Respond with ONLY a single JSON object matching exactly:
+
+{ "name": "string", "cuisine": "string", "priceRange": "string", "mealType": "string", "why": "string" }
+
+Hard requirements:
+- "name" must be copied EXACTLY from the candidate list. Never invent a place.
+- Keep the same mealType as the restaurant being replaced, and an honest priceRange in ${currencyCode} (${sym}).
+- "why" must reference the real walking distance you were given and the traveler's tastes.`;
+}
+
+export function groundedRegenUserPrompt(
+  itinerary: Itinerary,
+  preferences: TripPreferences,
+  dayNumber: number,
+  current: RestaurantRec,
+  candidates: CandidateForPrompt[],
+): string {
+  const day = itinerary.days[dayNumber - 1];
+  return `Trip: ${itinerary.destination}
+
+Traveler profile:
+${describePreferences(preferences)}
+
+Day ${dayNumber} ("${day.theme}") activities: ${day.morning.activity}; ${day.afternoon.activity}; ${day.evening.activity}
+
+Replace this restaurant (${current.mealType}): "${current.name}". The traveler wasn't feeling it.
+
+Verified nearby candidates (all unused elsewhere in the trip):
+${candidateLines(candidates)}
+
+Return the JSON object only.`;
+}
+
 /* ------------------------------ regeneration ----------------------------- */
 
 function dayContext(day: ItineraryDay): string {

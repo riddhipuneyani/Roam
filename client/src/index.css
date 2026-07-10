@@ -73,4 +73,44 @@
   .roam-range:focus-visible {
     @apply outline-none ring-2 ring-accent/30 ring-offset-2 ring-offset-background;
   }
+
+  /* ---------- day maps (Leaflet) ---------- */
+  .roam-div-icon {
+    background: transparent;
+    border: none;
+  }
+  .roam-pin {
+    @apply flex h-6 w-6 items-center justify-center rounded-full border-2 border-background font-body text-[10px] font-bold leading-none text-background shadow-soft;
+  }
+  .roam-pin-activity {
+    @apply bg-primary;
+  }
+  .roam-pin-restaurant {
+    @apply bg-accent;
+  }
+  .leaflet-container {
+    @apply bg-surface font-body text-body-sm;
+  }
+  /* Warm the Positron tiles toward the paper palette */
+  .leaflet-container .leaflet-tile {
+    filter: sepia(0.14) saturate(0.85);
+  }
+  .roam-popup .leaflet-popup-content-wrapper {
+    @apply rounded-lg border border-border bg-background text-text-primary shadow-soft-md;
+  }
+  .roam-popup .leaflet-popup-content {
+    @apply m-0 px-4 py-2.5 font-body;
+  }
+  .roam-popup .roam-popup-title {
+    @apply font-display text-base leading-snug;
+  }
+  .roam-popup .roam-popup-meta {
+    @apply mt-0.5 text-caption uppercase tracking-[0.12em] text-text-muted;
+  }
+  .roam-popup .leaflet-popup-tip {
+    @apply border border-border bg-background;
+  }
+  .leaflet-container .leaflet-control-attribution {
+    @apply bg-background/80 font-body text-[10px] text-text-muted;
+  }
 }

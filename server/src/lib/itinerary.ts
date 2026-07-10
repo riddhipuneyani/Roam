@@ -31,6 +31,9 @@ export interface ActivityBlock {
   why: string;
   estimatedCost: string;
   location: string;
+  /** Attached server-side by geocoding — never expected from the model. */
+  lat?: number | null;
+  lon?: number | null;
 }
 
 export interface RestaurantRec {
@@ -39,6 +42,9 @@ export interface RestaurantRec {
   priceRange: string;
   mealType: string;
   why: string;
+  /** Attached server-side from OSM data when the pick is grounded. */
+  lat?: number | null;
+  lon?: number | null;
 }
 
 export interface ItineraryDay {

@@ -41,6 +41,16 @@ enum ExpenseCategory {
   other
 }
 
+/// Nominatim results keyed by normalized query string, misses included,
+/// so repeated generations never re-geocode the same place.
+model GeoCache {
+  id        String   @id @default(cuid())
+  query     String   @unique
+  lat       Float?
+  lon       Float?
+  createdAt DateTime @default(now())
+}
+
 model TripExpense {
   id        String          @id @default(cuid())
   tripId    String
