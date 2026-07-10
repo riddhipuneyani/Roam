@@ -4,7 +4,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AppNav } from '../components/AppNav';
 import { TravelImage } from '../components/TravelImage';
 import { Badge, Button, FadeInUp, Spinner } from '../components/ui';
-import { BudgetSection } from '../features/budget/BudgetSection';
 import { ApiRequestError, generateApi, tripsApi } from '../lib/api';
 import { destinationImage } from '../lib/images';
 import type { ActivityBlock, ActivitySlot, RestaurantRec, Trip } from '../lib/types';
@@ -12,7 +11,7 @@ import type { ActivityBlock, ActivitySlot, RestaurantRec, Trip } from '../lib/ty
 /* --------------------------------- helpers -------------------------------- */
 
 function parseCost(value: string): number | null {
-  const match = value.replace(/,/g, '').match(/\$\s?(\d+(?:\.\d+)?)/);
+  const match = value.replace(/,/g, '').match(/[$₹]\s?(\d+(?:\.\d+)?)/);
   return match ? Number(match[1]) : null;
 }
 
@@ -155,6 +154,7 @@ export function Itinerary() {
   const [busySlot, setBusySlot] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [activating, setActivating] = useState(false);
   const [activeDay, setActiveDay] = useState(1);
   const dayRefs = useRef<Record<number, HTMLElement | null>>({});
 
@@ -237,6 +237,22 @@ export function Itinerary() {
     },
     [trip],
   );
+
+  async function markUnderway() {
+    if (!trip) return;
+    setActivating(true);
+    try {
+      const { trip: updated } = await tripsApi.activate(trip.id);
+      setTrip(updated);
+      setToast('Bon voyage — the ledger is open for this trip.');
+    } catch (err) {
+      setToast(
+        err instanceof ApiRequestError ? err.message : 'That didn’t work — please try again.',
+      );
+    } finally {
+      setActivating(false);
+    }
+  }
 
   async function retryDraft() {
     if (!trip) return;
@@ -359,51 +375,87 @@ export function Itinerary() {
             <p className="mt-4 max-w-2xl font-body text-body-lg text-background/90">
               {itinerary.tripSummary}
             </p>
-            <p className="mt-5 inline-block border border-background/50 px-4 py-1.5 font-body text-body-sm text-background">
-              {itinerary.estimatedTotalBudget}
-            </p>
+            <div className="mt-5 flex flex-wrap items-center gap-4">
+              <p className="inline-block border border-background/50 px-4 py-1.5 font-body text-body-sm text-background">
+                Est. budget · {itinerary.estimatedTotalBudget}
+              </p>
+              {trip.status === 'complete' && (
+                <Button
+                  onClick={() => void markUnderway()}
+                  disabled={activating}
+                  className="!bg-accent px-6 hover:!bg-accent-hover"
+                >
+                  {activating ? (
+                    <>
+                      <Spinner size="sm" className="[&>span]:bg-background/90" /> One moment…
+                    </>
+                  ) : (
+                    'We’re taking this trip'
+                  )}
+                </Button>
+              )}
+              {trip.status === 'active' && (
+                <>
+                  <Badge variant="sage">Underway</Badge>
+                  <Link
+                    to={`/trip/${trip.id}/expenses`}
+                    className="font-body text-body-sm font-medium text-background underline decoration-background/50 underline-offset-4 transition-colors hover:decoration-background"
+                  >
+                    Open the ledger →
+                  </Link>
+                </>
+              )}
+            </div>
           </FadeInUp>
         </div>
       </header>
 
       {/* ------------------------- sticky chapter navigation ------------------------ */}
       <nav className="sticky top-0 z-30 border-b border-border/70 bg-background/95 backdrop-blur">
-        <div className="flex gap-1 overflow-x-auto px-6 md:px-12 lg:px-24">
-          {itinerary.days.map((day) => (
+        <div className="flex items-stretch justify-between px-6 md:px-12 lg:px-24">
+          <div className="flex flex-1 gap-1 overflow-x-auto">
+            {itinerary.days.map((day) => (
+              <button
+                key={day.dayNumber}
+                type="button"
+                onClick={() =>
+                  dayRefs.current[day.dayNumber]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }
+                className={`whitespace-nowrap border-b-2 px-4 py-4 font-body text-body-sm transition-colors duration-200 ${
+                  activeDay === day.dayNumber
+                    ? 'border-accent font-medium text-text-primary'
+                    : 'border-transparent text-text-muted hover:text-text-primary'
+                }`}
+              >
+                <span className="font-display italic">Day {day.dayNumber}</span>
+                <span className="ml-2 hidden md:inline">{day.theme}</span>
+              </button>
+            ))}
             <button
-              key={day.dayNumber}
               type="button"
               onClick={() =>
-                dayRefs.current[day.dayNumber]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                document.getElementById('closing-spread')?.scrollIntoView({ behavior: 'smooth' })
               }
-              className={`whitespace-nowrap border-b-2 px-4 py-4 font-body text-body-sm transition-colors duration-200 ${
-                activeDay === day.dayNumber
-                  ? 'border-accent font-medium text-text-primary'
-                  : 'border-transparent text-text-muted hover:text-text-primary'
-              }`}
+              className="whitespace-nowrap border-b-2 border-transparent px-4 py-4 font-body text-body-sm text-text-muted transition-colors hover:text-text-primary"
             >
-              <span className="font-display italic">Day {day.dayNumber}</span>
-              <span className="ml-2 hidden md:inline">{day.theme}</span>
+              <span className="font-display italic">Before you go</span>
             </button>
-          ))}
-          <button
-            type="button"
-            onClick={() =>
-              document.getElementById('budget-section')?.scrollIntoView({ behavior: 'smooth' })
-            }
-            className="whitespace-nowrap border-b-2 border-transparent px-4 py-4 font-body text-body-sm text-text-muted transition-colors hover:text-text-primary"
-          >
-            <span className="font-display italic">The ledger</span>
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              document.getElementById('closing-spread')?.scrollIntoView({ behavior: 'smooth' })
-            }
-            className="whitespace-nowrap border-b-2 border-transparent px-4 py-4 font-body text-body-sm text-text-muted transition-colors hover:text-text-primary"
-          >
-            <span className="font-display italic">Before you go</span>
-          </button>
+            {trip.status === 'active' && (
+              <Link
+                to={`/trip/${trip.id}/expenses`}
+                className="whitespace-nowrap border-b-2 border-transparent px-4 py-4 font-body text-body-sm font-medium text-accent transition-colors hover:text-accent-hover"
+              >
+                <span className="font-display italic">The ledger →</span>
+              </Link>
+            )}
+          </div>
+          {/* Lightweight, always-visible estimate — the full dashboard lives on the ledger page */}
+          <p className="hidden items-center gap-2 whitespace-nowrap border-l border-border/70 pl-5 font-body text-body-sm text-text-muted lg:flex">
+            <span className="kicker">Est. budget</span>
+            <span className="font-medium text-secondary-accent-hover">
+              {itinerary.estimatedTotalBudget}
+            </span>
+          </p>
         </div>
       </nav>
 
@@ -485,9 +537,6 @@ export function Itinerary() {
             </section>
           );
         })}
-
-        {/* ------------------------------ the ledger ------------------------------ */}
-        <BudgetSection trip={trip} />
 
         {/* ------------------------------ closing spread ------------------------------ */}
         <section id="closing-spread" className="scroll-mt-16 border-t border-border/70 py-16">

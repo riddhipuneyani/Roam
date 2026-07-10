@@ -16,19 +16,37 @@ const router = Router({ mergeParams: true });
 
 router.use(requireAuth);
 
-/**
- * The itinerary prompt asks for USD prices ("$18", "$40 for two", "Free"),
- * so AI estimates are treated as USD and converted from there.
- */
-const ITINERARY_CURRENCY = 'USD';
-
 function parseCost(value: string): number | null {
-  const match = value.replace(/,/g, '').match(/\$\s?(\d+(?:\.\d+)?)/);
+  const match = value.replace(/,/g, '').match(/[$₹]\s?(\d+(?:\.\d+)?)/);
   return match ? Number(match[1]) : null;
 }
 
+/**
+ * Which currency the trip's own numbers (budgetEstimate, AI costs) are in.
+ * New trips record it in preferences; older trips are detected from the
+ * itinerary's cost strings ($ era vs ₹ era), falling back to INR.
+ */
+function tripSourceCurrency(
+  preferences: { currency?: unknown },
+  itinerary: Itinerary | null,
+): string {
+  if (typeof preferences.currency === 'string' && /^[A-Za-z]{3}$/.test(preferences.currency)) {
+    return preferences.currency.toUpperCase();
+  }
+  if (itinerary) {
+    const sample = [
+      itinerary.estimatedTotalBudget,
+      itinerary.days[0]?.dailyBudgetEstimate ?? '',
+      itinerary.days[0]?.morning.estimatedCost ?? '',
+    ].join(' ');
+    if (sample.includes('₹')) return 'INR';
+    if (sample.includes('$')) return 'USD';
+  }
+  return 'INR';
+}
+
 /** Sum the AI's own per-day estimates; fall back to its trip total. */
-function estimateItineraryTotalUsd(itinerary: Itinerary | null): number | null {
+function estimateItineraryTotal(itinerary: Itinerary | null): number | null {
   if (!itinerary) return null;
   const dayCosts = itinerary.days
     .map((day) => parseCost(day.dailyBudgetEstimate))
@@ -52,7 +70,7 @@ router.get(
       return;
     }
 
-    const display = String(req.query.currency ?? ITINERARY_CURRENCY).toUpperCase();
+    const display = String(req.query.currency ?? 'INR').toUpperCase();
     if (!/^[A-Z]{3}$/.test(display)) {
       res.status(400).json({ error: 'currency must be a 3-letter code' });
       return;
@@ -68,14 +86,21 @@ router.get(
       const toDisplay = (amount: number, from: string) =>
         convertAmount(amount, from, display, rates);
 
-      // Planned budget comes from the onboarding budget tier (USD).
-      const prefs = trip.preferences as { budgetEstimate?: unknown; budgetTier?: unknown };
-      const plannedUsd =
+      // Planned budget comes from the onboarding budget tier, denominated in
+      // the trip's own currency (INR for new trips, USD for the earlier era).
+      const prefs = trip.preferences as {
+        budgetEstimate?: unknown;
+        budgetTier?: unknown;
+        currency?: unknown;
+      };
+      const itinerary = trip.itinerary as Itinerary | null;
+      const sourceCurrency = tripSourceCurrency(prefs, itinerary);
+      const plannedSource =
         typeof prefs.budgetEstimate === 'number' && prefs.budgetEstimate > 0
           ? prefs.budgetEstimate
           : null;
 
-      const estimatedUsd = estimateItineraryTotalUsd(trip.itinerary as Itinerary | null);
+      const estimatedSource = estimateItineraryTotal(itinerary);
 
       const byCategory = Object.values(ExpenseCategory).map((category) => ({
         category,
@@ -93,12 +118,14 @@ router.get(
         bucket.count += 1;
       }
 
-      const plannedBudget = plannedUsd !== null ? toDisplay(plannedUsd, ITINERARY_CURRENCY) : null;
+      const plannedBudget =
+        plannedSource !== null ? toDisplay(plannedSource, sourceCurrency) : null;
       const estimatedTotal =
-        estimatedUsd !== null ? toDisplay(estimatedUsd, ITINERARY_CURRENCY) : null;
+        estimatedSource !== null ? toDisplay(estimatedSource, sourceCurrency) : null;
 
       res.json({
         displayCurrency: display,
+        sourceCurrency,
         rateDate: date,
         budgetTier: typeof prefs.budgetTier === 'string' ? prefs.budgetTier : null,
         plannedBudget: plannedBudget !== null ? round2(plannedBudget) : null,

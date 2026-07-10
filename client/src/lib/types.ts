@@ -1,4 +1,4 @@
-export type BudgetTier = 'budget' | 'comfortable' | 'luxury';
+﻿export type BudgetTier = 'budget' | 'comfortable' | 'luxury';
 export type Companions = 'solo' | 'partner' | 'friends' | 'family';
 export type TripVibe =
   | 'relaxation'
@@ -13,6 +13,8 @@ export interface TripPreferences {
   duration: number;
   budgetTier: BudgetTier;
   budgetEstimate: number;
+  /** Currency of budgetEstimate and generated prices; older trips (USD era) may lack it. */
+  currency?: string;
   destinationKnown: boolean;
   destination: string | null;
   vibe: TripVibe[];
@@ -20,6 +22,8 @@ export interface TripPreferences {
   foodPreferences: string[];
   customInterests: string[];
 }
+
+export type TripStatus = 'draft' | 'complete' | 'active';
 
 export interface ActivityBlock {
   activity: string;
@@ -71,7 +75,7 @@ export interface Trip {
   userId: string;
   title: string;
   destination: string;
-  status: 'draft' | 'complete';
+  status: TripStatus;
   preferences: TripPreferences;
   itinerary: Itinerary | null;
   createdAt: string;
@@ -107,6 +111,8 @@ export interface BudgetCategoryBreakdown {
 
 export interface BudgetSummary {
   displayCurrency: string;
+  /** The currency the trip's own numbers are denominated in (INR default, USD for older trips). */
+  sourceCurrency: string;
   rateDate: string;
   budgetTier: BudgetTier | null;
   plannedBudget: number | null;
@@ -130,7 +136,7 @@ export interface TripSummary {
   id: string;
   title: string;
   destination: string;
-  status: 'draft' | 'complete';
+  status: TripStatus;
   preferences: TripPreferences;
   createdAt: string;
   updatedAt: string;

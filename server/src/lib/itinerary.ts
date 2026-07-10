@@ -15,6 +15,8 @@ export interface TripPreferences {
   duration: number;
   budgetTier: BudgetTier;
   budgetEstimate: number;
+  /** Currency of budgetEstimate and generated prices. Absent on pre-INR trips (USD era). */
+  currency?: string;
   destinationKnown: boolean;
   destination: string | null;
   vibe: string[];
@@ -333,6 +335,10 @@ export function validatePreferences(value: unknown): Result<TripPreferences> {
 
   if (typeof value.budgetEstimate !== 'number' || value.budgetEstimate <= 0) {
     errors.push('budgetEstimate must be a positive number');
+  }
+
+  if (value.currency !== undefined && (typeof value.currency !== 'string' || !/^[A-Za-z]{3}$/.test(value.currency))) {
+    errors.push('currency must be a 3-letter code when provided');
   }
 
   if (typeof value.destinationKnown !== 'boolean') {

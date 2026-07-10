@@ -9,12 +9,20 @@ import type {
 const TONE = `You are the trip designer behind Roam, a calm, editorial travel planning
 service. You write like a well-traveled friend: specific, warm, unhurried, never
 salesy. You recommend real, currently-operating places by their real names, with
-realistic prices in USD.`;
+realistic prices.`;
+
+/** New trips are priced in INR; older drafts may carry USD preferences. */
+export function preferenceCurrency(preferences: TripPreferences): { code: string; symbol: string } {
+  return preferences.currency === 'USD'
+    ? { code: 'USD', symbol: '$' }
+    : { code: 'INR', symbol: '₹' };
+}
 
 function describePreferences(preferences: TripPreferences): string {
+  const { symbol } = preferenceCurrency(preferences);
   const lines = [
     `Trip length: ${preferences.duration} days`,
-    `Budget tier: ${preferences.budgetTier} (roughly $${preferences.budgetEstimate} total for the whole trip, excluding flights)`,
+    `Budget tier: ${preferences.budgetTier} (roughly ${symbol}${preferences.budgetEstimate.toLocaleString('en-IN')} total for the whole trip, excluding flights)`,
     `Traveling: ${preferences.companions}`,
     `Trip vibe: ${preferences.vibe.join(', ')}`,
   ];
@@ -29,7 +37,8 @@ function describePreferences(preferences: TripPreferences): string {
 
 /* ------------------------------- itinerary ------------------------------- */
 
-export function itinerarySystemPrompt(days: number): string {
+export function itinerarySystemPrompt(days: number, currencyCode = 'INR'): string {
+  const sym = currencyCode === 'USD' ? '$' : '₹';
   return `${TONE}
 
 Respond with ONLY a single JSON object — no markdown, no commentary — matching exactly this schema:
@@ -37,7 +46,7 @@ Respond with ONLY a single JSON object — no markdown, no commentary — matchi
 {
   "destination": "string — city, country",
   "tripSummary": "string — 2-3 sentences capturing the shape and feel of the trip",
-  "estimatedTotalBudget": "string — e.g. \\"$1,450 for two people\\"",
+  "estimatedTotalBudget": "string — e.g. \\"${sym}1,20,000 for two people\\"",
   "days": [
     {
       "dayNumber": 1,
@@ -45,9 +54,9 @@ Respond with ONLY a single JSON object — no markdown, no commentary — matchi
       "morning":   { "activity": "string", "description": "string", "why": "string", "estimatedCost": "string", "location": "string — neighborhood or address" },
       "afternoon": { "activity": "string", "description": "string", "why": "string", "estimatedCost": "string", "location": "string" },
       "evening":   { "activity": "string", "description": "string", "why": "string", "estimatedCost": "string", "location": "string" },
-      "restaurants": [{ "name": "string", "cuisine": "string", "priceRange": "string — e.g. \\"$$ · ~$25/person\\"", "mealType": "string — breakfast/lunch/dinner", "why": "string" }],
+      "restaurants": [{ "name": "string", "cuisine": "string", "priceRange": "string — e.g. \\"$$ · ~${sym}800/person\\"", "mealType": "string — breakfast/lunch/dinner", "why": "string" }],
       "transport": "string — how to get around this day",
-      "dailyBudgetEstimate": "string — e.g. \\"$140\\"",
+      "dailyBudgetEstimate": "string — e.g. \\"${sym}9,500\\"",
       "tip": "string — one insider note for the day"
     }
   ],
@@ -57,9 +66,10 @@ Respond with ONLY a single JSON object — no markdown, no commentary — matchi
 
 Hard requirements:
 - "days" must contain exactly ${days} entries, with dayNumber running 1 to ${days}.
+- ALL monetary amounts — estimatedTotalBudget, every estimatedCost, every priceRange, every dailyBudgetEstimate — must be in ${currencyCode} with the ${sym} symbol, regardless of the destination's local currency. Convert local prices to realistic ${currencyCode} figures.
 - Every "why" field is the heart of the product: it must explain why THIS choice fits THIS traveler — connect it explicitly to their stated vibe, budget tier, companions, food preferences, or interests. Never just describe the place.
 - 2-3 restaurants per day, matched to the stated food preferences.
-- "estimatedCost" strings like "$18", "Free", or "$40 for two" — consistent with the budget tier.
+- "estimatedCost" strings like "${sym}1,500", "Free", or "${sym}3,000 for two" — consistent with the budget tier.
 - Descriptions are 2-3 sentences. Real place names only; if unsure a place still operates, choose a safer well-known alternative.
 - Pace the days realistically: cluster activities by neighborhood, don't zig-zag across the city.
 - NEVER repeat yourself across the trip: every activity (morning/afternoon/evening) and every restaurant must appear exactly once in the whole itinerary. Before finishing, re-read all ${days} days and replace any repeated activity or restaurant with a different real one.`;
@@ -140,7 +150,7 @@ Respond with ONLY a single JSON object — one replacement activity — matching
 
 Hard requirements:
 - Must be a genuinely different activity from the current one and from everything else already planned that day.
-- Must suit the same time of day, the day's theme, and the traveler's budget tier — keep the cost in the same band.
+- Must suit the same time of day, the day's theme, and the traveler's budget tier — keep the cost in the same band and in the same currency the itinerary already uses.
 - The "why" must connect the choice to the traveler's stated preferences.`;
 }
 
@@ -175,7 +185,7 @@ Respond with ONLY a single JSON object — one replacement restaurant — matchi
 
 Hard requirements:
 - A real, currently-operating restaurant, different from the current one and the others already planned that day.
-- Same meal type and a similar price range as the one being replaced.
+- Same meal type and a similar price range as the one being replaced, in the same currency the itinerary already uses.
 - The "why" must connect the choice to the traveler's stated food preferences and budget.`;
 }
 

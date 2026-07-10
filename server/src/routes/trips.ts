@@ -64,12 +64,37 @@ router.post(
         userId: trip.userId,
         title: `${trip.title} (copy)`,
         destination: trip.destination,
-        status: trip.status,
+        // A copy of a trip you're currently on isn't itself underway.
+        status: trip.status === 'active' ? 'complete' : trip.status,
         preferences: trip.preferences as Prisma.InputJsonValue,
         itinerary: (trip.itinerary ?? undefined) as Prisma.InputJsonValue | undefined,
       },
     });
     res.status(201).json({ trip: copy });
+  }),
+);
+
+router.post(
+  '/:id/activate',
+  asyncHandler(async (req: Request, res: Response) => {
+    const trip = await findOwnedTrip(req.params.id, req.user!.id);
+    if (!trip) {
+      res.status(404).json({ error: 'Trip not found' });
+      return;
+    }
+    if (trip.status === 'active') {
+      res.json({ trip }); // already underway — idempotent
+      return;
+    }
+    if (trip.status !== 'complete' || !trip.itinerary) {
+      res.status(400).json({ error: 'Only a finished itinerary can be marked as underway' });
+      return;
+    }
+    const updated = await prisma.trip.update({
+      where: { id: trip.id },
+      data: { status: 'active' },
+    });
+    res.json({ trip: updated });
   }),
 );
 

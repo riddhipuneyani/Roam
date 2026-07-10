@@ -107,6 +107,9 @@ export const tripsApi = {
   duplicate: (id: string) =>
     apiRequest<{ trip: Trip }>(`/api/trips/${id}/duplicate`, { method: 'POST' }),
 
+  activate: (id: string) =>
+    apiRequest<{ trip: Trip }>(`/api/trips/${id}/activate`, { method: 'POST' }),
+
   remove: (id: string) =>
     apiRequest<{ message: string }>(`/api/trips/${id}`, { method: 'DELETE' }),
 

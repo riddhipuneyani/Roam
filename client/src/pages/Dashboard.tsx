@@ -49,6 +49,11 @@ function TripTile({
               <Badge variant="clay">Draft</Badge>
             </div>
           )}
+          {trip.status === 'active' && (
+            <div className="absolute left-3 top-3">
+              <Badge variant="sage">Underway</Badge>
+            </div>
+          )}
         </div>
         <div className="flex items-baseline justify-between gap-4 border-b border-border/70 pb-3 pt-4">
           <div>

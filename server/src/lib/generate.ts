@@ -16,6 +16,7 @@ import {
   destinationsUserPrompt,
   itinerarySystemPrompt,
   itineraryUserPrompt,
+  preferenceCurrency,
   regenerateActivitySystemPrompt,
   regenerateActivityUserPrompt,
   regenerateRestaurantSystemPrompt,
@@ -88,7 +89,7 @@ export async function generateItinerary(
     return sampleItinerary(destination, preferences);
   }
   return generateValidated(
-    itinerarySystemPrompt(preferences.duration),
+    itinerarySystemPrompt(preferences.duration, preferenceCurrency(preferences).code),
     itineraryUserPrompt(destination, preferences),
     (value) => validateItinerary(value, preferences.duration),
     0.7,

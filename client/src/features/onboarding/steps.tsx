@@ -19,16 +19,19 @@ export const VIBE_OPTIONS: Array<{ id: TripVibe; label: string; blurb: string }>
   { id: 'solo-reset', label: 'Solo reset', blurb: 'Time that belongs to you' },
 ];
 
+/** Daily figures per person in INR — the app's default currency. */
 export const BUDGET_TIERS: Array<{
   id: BudgetTier;
   label: string;
   perDay: [number, number];
   blurb: string;
 }> = [
-  { id: 'budget', label: 'Budget', perDay: [60, 120], blurb: 'Simple stays, street food and markets, free wonders first.' },
-  { id: 'comfortable', label: 'Comfortable', perDay: [150, 300], blurb: 'Boutique stays, a proper dinner most nights, the odd splurge.' },
-  { id: 'luxury', label: 'Luxury', perDay: [350, 700], blurb: 'Beautiful hotels, chef’s counters, a guide when it counts.' },
+  { id: 'budget', label: 'Budget', perDay: [2500, 6000], blurb: 'Simple stays, street food and markets, free wonders first.' },
+  { id: 'comfortable', label: 'Comfortable', perDay: [8000, 20000], blurb: 'Boutique stays, a proper dinner most nights, the odd splurge.' },
+  { id: 'luxury', label: 'Luxury', perDay: [25000, 60000], blurb: 'Beautiful hotels, chef’s counters, a guide when it counts.' },
 ];
+
+export const inr = (value: number): string => `₹${value.toLocaleString('en-IN')}`;
 
 const COMPANION_OPTIONS: Array<{ id: Companions; label: string; blurb: string; heads: number }> = [
   { id: 'solo', label: 'Just me', blurb: 'Your pace, your rules', heads: 1 },
@@ -90,6 +93,7 @@ export function buildPreferences(a: OnboardingAnswers, chosenDestination?: strin
     duration: a.duration,
     budgetTier: tier.id,
     budgetEstimate: Math.round(midPerDay * a.duration),
+    currency: 'INR',
     destinationKnown: a.destinationKnown === true,
     destination,
     vibe: a.vibe,
@@ -234,7 +238,7 @@ export function StepBudget({ answers, update }: StepProps) {
           <OptionCard
             key={tier.id}
             title={tier.label}
-            meta={`$${tier.perDay[0]}–${tier.perDay[1]}/day`}
+            meta={`${inr(tier.perDay[0])}–${inr(tier.perDay[1])}/day`}
             description={tier.blurb}
             selected={answers.budgetTier === tier.id}
             onClick={() => update({ budgetTier: tier.id })}
@@ -246,7 +250,7 @@ export function StepBudget({ answers, update }: StepProps) {
           For {days} days, plan on roughly{' '}
           {(() => {
             const tier = BUDGET_TIERS.find((t) => t.id === answers.budgetTier)!;
-            return `$${(tier.perDay[0] * days).toLocaleString()}–$${(tier.perDay[1] * days).toLocaleString()}`;
+            return `${inr(tier.perDay[0] * days)}–${inr(tier.perDay[1] * days)}`;
           })()}{' '}
           per person.
         </p>
@@ -409,7 +413,7 @@ export function StepReview({
     { label: 'Time', value: `${answers.duration} days`, step: 2 },
     {
       label: 'Budget',
-      value: tier ? `${tier.label} · $${tier.perDay[0]}–${tier.perDay[1]}/day` : '—',
+      value: tier ? `${tier.label} · ${inr(tier.perDay[0])}–${inr(tier.perDay[1])}/day` : '—',
       step: 3,
     },
     { label: 'Company', value: companion?.label ?? '—', step: 4 },
