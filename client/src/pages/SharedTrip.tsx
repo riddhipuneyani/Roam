@@ -18,7 +18,21 @@ export function SharedTrip() {
   const [trip, setTrip] = useState<SharedTripData | null>(null);
   const [gone, setGone] = useState(false);
   const [activeDay, setActiveDay] = useState(1);
+  const [ledgerInView, setLedgerInView] = useState(false);
   const dayRefs = useRef<Record<number, HTMLElement | null>>({});
+
+  /* Hide the floating ledger button once the ledger itself is on screen */
+  useEffect(() => {
+    if (!trip?.itinerary) return;
+    const target = document.getElementById('shared-ledger');
+    if (!target) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setLedgerInView(entry.isIntersecting),
+      { rootMargin: '0px 0px -20% 0px' },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [trip?.itinerary]);
 
   useEffect(() => {
     if (!shareToken) return;
@@ -98,7 +112,9 @@ export function SharedTrip() {
   return (
     <div className="min-h-screen bg-background">
       {/* ---------------------------------- hero ---------------------------------- */}
-      <header className="relative h-[52vh] min-h-[400px]">
+      {/* Flex flow so the wordmark and kicker/title never overlap, whatever
+          the title length or viewport width. */}
+      <header className="relative flex min-h-[52vh] flex-col">
         <TravelImage
           src={destinationImage(trip.destination)}
           alt={trip.destination}
@@ -106,13 +122,13 @@ export function SharedTrip() {
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-primary/85 via-primary/25 to-primary/20" />
-        <div className="absolute left-0 right-0 top-0 flex items-baseline justify-between px-6 py-5 md:px-12">
+        <div className="relative z-10 flex items-baseline justify-between gap-4 px-6 py-5 md:px-12">
           <Link to="/" className="font-display text-2xl italic text-background">
             Roam
           </Link>
-          <p className="font-body text-body-sm text-background/80">A shared journey</p>
+          <p className="whitespace-nowrap font-body text-body-sm text-background/80">A shared journey</p>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 px-6 pb-10 md:px-12 lg:px-24">
+        <div className="relative z-10 mt-auto px-6 pb-10 pt-10 md:px-12 lg:px-24">
           <FadeInUp>
             <p className="kicker !text-background/75">
               {trip.preferences.duration ? `${trip.preferences.duration} days` : 'A trip'}
@@ -219,6 +235,23 @@ export function SharedTrip() {
             planning.
           </p>
         </main>
+      )}
+
+      {/* Always-reachable jump to the ledger — no scrolling the whole
+          itinerary just to log a coffee. Hidden while the ledger is visible. */}
+      {itinerary && !ledgerInView && (
+        <button
+          type="button"
+          onClick={() =>
+            document.getElementById('shared-ledger')?.scrollIntoView({ behavior: 'smooth' })
+          }
+          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 font-body text-body-sm font-medium text-background shadow-soft-md transition-colors duration-200 hover:bg-primary-hover focus-visible:focus-ring"
+        >
+          Log an expense
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6 1.5v9M2.5 7 6 10.5 9.5 7" />
+          </svg>
+        </button>
       )}
 
       {/* ---------------------------------- footer --------------------------------- */}

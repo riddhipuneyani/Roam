@@ -258,7 +258,10 @@ export function Itinerary() {
   return (
     <div className="min-h-screen bg-background">
       {/* ---------------------------------- hero ---------------------------------- */}
-      <header className="relative h-[58vh] min-h-[420px]">
+      {/* Flex flow (not stacked absolutes): the hero grows with its content,
+          so the wordmark row and the kicker/title block can never overlap,
+          whatever the title length or viewport. */}
+      <header className="relative flex min-h-[58vh] flex-col">
         <TravelImage
           src={destinationImage(itinerary.destination)}
           alt={itinerary.destination}
@@ -266,18 +269,18 @@ export function Itinerary() {
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-primary/85 via-primary/25 to-primary/20" />
-        <div className="absolute left-0 right-0 top-0 flex items-baseline justify-between px-6 py-5 md:px-12">
+        <div className="relative z-10 flex items-baseline justify-between gap-4 px-6 py-5 md:px-12">
           <Link to="/dashboard" className="font-display text-2xl italic text-background">
             Roam
           </Link>
           <Link
             to="/dashboard"
-            className="font-body text-body-sm text-background/80 transition-colors hover:text-background"
+            className="whitespace-nowrap font-body text-body-sm text-background/80 transition-colors hover:text-background"
           >
             ← Your journeys
           </Link>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 px-6 pb-10 md:px-12 lg:px-24">
+        <div className="relative z-10 mt-auto px-6 pb-10 pt-10 md:px-12 lg:px-24">
           <FadeInUp>
             <p className="kicker !text-background/75">
               {prefs.duration} days · {prefs.companions} · {prefs.budgetTier}
