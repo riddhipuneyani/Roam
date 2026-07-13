@@ -111,6 +111,26 @@ export const tripsApi = {
   activate: (id: string) =>
     apiRequest<{ trip: Trip }>(`/api/trips/${id}/activate`, { method: 'POST' }),
 
+  /** Returns the PDF blob + the server-suggested filename. */
+  exportPdf: async (id: string): Promise<{ blob: Blob; filename: string }> => {
+    const response = await fetch(`${API_BASE}/api/trips/${id}/export-pdf`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new ApiRequestError(
+        typeof data === 'object' && data !== null && 'error' in data && typeof data.error === 'string'
+          ? data.error
+          : 'The PDF didn’t come together — please try again in a moment.',
+        response.status,
+        data,
+      );
+    }
+    const disposition = response.headers.get('content-disposition') ?? '';
+    const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? 'roam-itinerary.pdf';
+    return { blob: await response.blob(), filename };
+  },
+
   share: (id: string) =>
     apiRequest<{ shareToken: string; shareUrl: string }>(`/api/trips/${id}/share`, {
       method: 'POST',

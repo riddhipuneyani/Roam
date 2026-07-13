@@ -9,6 +9,7 @@ import { Plan } from './pages/Plan';
 import { Itinerary } from './pages/Itinerary';
 import { TripExpenses } from './pages/TripExpenses';
 import { SharedTrip } from './pages/SharedTrip';
+import { PrintItinerary } from './pages/PrintItinerary';
 import { StyleGuide } from './pages/StyleGuide';
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/plan" element={<Plan />} />
             <Route path="/itinerary/:tripId" element={<Itinerary />} />
+            <Route path="/print/:tripId" element={<PrintItinerary />} />
             <Route path="/trip/:tripId/expenses" element={<TripExpenses />} />
           </Route>
         </Routes>

@@ -74,6 +74,15 @@
     @apply outline-none ring-2 ring-accent/30 ring-offset-2 ring-offset-background;
   }
 
+  /* ---------- print / PDF export ---------- */
+  .print-root {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .print-break {
+    break-before: page;
+  }
+
   /* ---------- day maps (Leaflet) ---------- */
   .roam-div-icon {
     background: transparent;

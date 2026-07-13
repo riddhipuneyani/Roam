@@ -26,6 +26,7 @@ export function Itinerary() {
   const [shareBusy, setShareBusy] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (!tripId) return;
@@ -166,6 +167,30 @@ export function Itinerary() {
       setTimeout(() => setCopied(false), 2500);
     } catch {
       setToast('Couldn’t reach the clipboard — select the link and copy it by hand.');
+    }
+  }
+
+  async function downloadPdf() {
+    if (!trip || exporting) return;
+    setExporting(true);
+    try {
+      const { blob, filename } = await tripsApi.exportPdf(trip.id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setToast(
+        err instanceof ApiRequestError
+          ? err.message
+          : 'The PDF didn’t come together — please try again in a moment.',
+      );
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -331,6 +356,21 @@ export function Itinerary() {
                   {shareBusy ? 'Switching on…' : 'Share this trip'}
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => void downloadPdf()}
+                disabled={exporting}
+                className="inline-flex items-center gap-2 border border-background/50 px-4 py-1.5 font-body text-body-sm text-background transition-colors hover:border-background hover:bg-background/10 disabled:opacity-70"
+              >
+                {exporting ? (
+                  <>
+                    <Spinner size="sm" className="[&>span]:bg-background/90" />
+                    Setting the type…
+                  </>
+                ) : (
+                  'Download PDF'
+                )}
+              </button>
             </div>
           </FadeInUp>
         </div>

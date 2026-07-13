@@ -11,6 +11,8 @@ import {
   validatePreferences,
 } from '../lib/itinerary.js';
 import { regenerateActivity, regenerateRestaurant } from '../lib/generate.js';
+import { AUTH_COOKIE_NAME } from '../lib/jwt.js';
+import { exportTripPdf } from '../lib/pdf.js';
 
 const router = Router();
 
@@ -146,6 +148,46 @@ router.delete(
     }
     await prisma.trip.delete({ where: { id: trip.id } });
     res.json({ message: 'Trip deleted' });
+  }),
+);
+
+router.get(
+  '/:id/export-pdf',
+  asyncHandler(async (req: Request, res: Response) => {
+    const trip = await findOwnedTrip(req.params.id, req.user!.id);
+    if (!trip || !trip.itinerary) {
+      res.status(404).json({ error: 'Trip not found' });
+      return;
+    }
+
+    try {
+      const pdf = await exportTripPdf(trip.id, {
+        name: AUTH_COOKIE_NAME,
+        value: req.cookies[AUTH_COOKIE_NAME],
+      });
+
+      const prefs = trip.preferences as { duration?: unknown };
+      const city =
+        trip.destination
+          .split(',')[0]
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '') || 'trip';
+      const days = typeof prefs.duration === 'number' ? `${prefs.duration}days` : 'itinerary';
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="roam-${city}-${days}.pdf"`);
+      res.send(Buffer.from(pdf));
+    } catch (error) {
+      console.error(
+        '[roam] pdf export failed:',
+        error instanceof Error ? error.message : error,
+      );
+      res.status(502).json({
+        error: 'The PDF didn’t come together — please try again in a moment.',
+      });
+    }
   }),
 );
 
