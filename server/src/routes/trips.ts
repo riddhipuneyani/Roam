@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
@@ -71,6 +72,43 @@ router.post(
       },
     });
     res.status(201).json({ trip: copy });
+  }),
+);
+
+function shareUrlFor(token: string): string {
+  const clientUrl = (process.env.CLIENT_URL ?? 'http://localhost:5173').replace(/\/$/, '');
+  return `${clientUrl}/shared/${token}`;
+}
+
+router.post(
+  '/:id/share',
+  asyncHandler(async (req: Request, res: Response) => {
+    const trip = await findOwnedTrip(req.params.id, req.user!.id);
+    if (!trip) {
+      res.status(404).json({ error: 'Trip not found' });
+      return;
+    }
+    let token = trip.shareToken;
+    if (!token) {
+      token = randomBytes(24).toString('base64url');
+      await prisma.trip.update({ where: { id: trip.id }, data: { shareToken: token } });
+    }
+    res.json({ shareToken: token, shareUrl: shareUrlFor(token) });
+  }),
+);
+
+router.delete(
+  '/:id/share',
+  asyncHandler(async (req: Request, res: Response) => {
+    const trip = await findOwnedTrip(req.params.id, req.user!.id);
+    if (!trip) {
+      res.status(404).json({ error: 'Trip not found' });
+      return;
+    }
+    if (trip.shareToken) {
+      await prisma.trip.update({ where: { id: trip.id }, data: { shareToken: null } });
+    }
+    res.json({ message: 'Sharing disabled — the old link no longer works' });
   }),
 );
 

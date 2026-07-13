@@ -25,6 +25,8 @@ model Trip {
   status      String        @default("draft")
   preferences Json
   itinerary   Json?
+  /// Set when sharing is enabled; clearing it invalidates the public link.
+  shareToken  String?       @unique
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   expenses    TripExpense[]
@@ -52,16 +54,19 @@ model GeoCache {
 }
 
 model TripExpense {
-  id        String          @id @default(cuid())
-  tripId    String
-  trip      Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  category  ExpenseCategory
-  label     String
-  amount    Decimal         @db.Decimal(12, 2)
-  currency  String          @db.Char(3)
-  date      DateTime
-  notes     String?
-  createdAt DateTime        @default(now())
+  id          String          @id @default(cuid())
+  tripId      String
+  trip        Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  category    ExpenseCategory
+  label       String
+  amount      Decimal         @db.Decimal(12, 2)
+  currency    String          @db.Char(3)
+  date        DateTime
+  notes       String?
+  /// Who logged it — the owner's name via the dashboard, or the name a
+  /// link visitor provides on the shared ledger.
+  addedByName String
+  createdAt   DateTime        @default(now())
 
   @@index([tripId])
 }

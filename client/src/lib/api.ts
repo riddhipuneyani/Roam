@@ -3,6 +3,7 @@ import type {
   BudgetSummary,
   DestinationOption,
   ExpenseInput,
+  SharedTripData,
   Trip,
   TripExpense,
   TripPreferences,
@@ -110,6 +111,14 @@ export const tripsApi = {
   activate: (id: string) =>
     apiRequest<{ trip: Trip }>(`/api/trips/${id}/activate`, { method: 'POST' }),
 
+  share: (id: string) =>
+    apiRequest<{ shareToken: string; shareUrl: string }>(`/api/trips/${id}/share`, {
+      method: 'POST',
+    }),
+
+  unshare: (id: string) =>
+    apiRequest<{ message: string }>(`/api/trips/${id}/share`, { method: 'DELETE' }),
+
   remove: (id: string) =>
     apiRequest<{ message: string }>(`/api/trips/${id}`, { method: 'DELETE' }),
 
@@ -154,6 +163,28 @@ export const budgetApi = {
 
   currencies: () =>
     apiRequest<{ currencies: Record<string, string> }>('/api/currency/currencies'),
+};
+
+/** Public shared-link API — authorized purely by the token, no login. */
+export const sharedApi = {
+  get: (token: string) => apiRequest<{ trip: SharedTripData }>(`/api/shared/${token}`),
+
+  listExpenses: (token: string) =>
+    apiRequest<{ expenses: TripExpense[] }>(`/api/shared/${token}/expenses`),
+
+  createExpense: (token: string, input: ExpenseInput) =>
+    apiRequest<{ expense: TripExpense }>(`/api/shared/${token}/expenses`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  removeExpense: (token: string, expenseId: string) =>
+    apiRequest<{ message: string }>(`/api/shared/${token}/expenses/${expenseId}`, {
+      method: 'DELETE',
+    }),
+
+  summary: (token: string, currency: string) =>
+    apiRequest<BudgetSummary>(`/api/shared/${token}/budget?currency=${encodeURIComponent(currency)}`),
 };
 
 export const generateApi = {

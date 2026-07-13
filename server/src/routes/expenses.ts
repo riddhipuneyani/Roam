@@ -10,16 +10,21 @@ router.use(requireAuth);
 
 const CATEGORIES = Object.values(ExpenseCategory);
 
-interface ExpenseInput {
+export interface ExpenseInput {
   category: ExpenseCategory;
   label: string;
   amount: number;
   currency: string;
   date: Date;
   notes: string | null;
+  /** Present only when parsed with requireAddedBy (shared-link writes). */
+  addedByName?: string;
 }
 
-function parseExpenseBody(body: unknown): { ok: true; value: ExpenseInput } | { ok: false; errors: string[] } {
+export function parseExpenseBody(
+  body: unknown,
+  options: { requireAddedBy?: boolean } = {},
+): { ok: true; value: ExpenseInput } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   const b = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>;
 
@@ -43,6 +48,12 @@ function parseExpenseBody(body: unknown): { ok: true; value: ExpenseInput } | { 
   if (b.notes !== undefined && b.notes !== null && typeof b.notes !== 'string') {
     errors.push('notes must be a string');
   }
+  if (
+    options.requireAddedBy &&
+    (typeof b.addedByName !== 'string' || b.addedByName.trim().length === 0 || b.addedByName.length > 60)
+  ) {
+    errors.push('addedByName is required (up to 60 characters)');
+  }
 
   if (errors.length > 0) return { ok: false, errors };
   return {
@@ -54,6 +65,7 @@ function parseExpenseBody(body: unknown): { ok: true; value: ExpenseInput } | { 
       currency: (b.currency as string).toUpperCase(),
       date: date as Date,
       notes: typeof b.notes === 'string' && b.notes.trim() ? b.notes.trim() : null,
+      ...(options.requireAddedBy ? { addedByName: (b.addedByName as string).trim() } : {}),
     },
   };
 }
@@ -101,6 +113,8 @@ router.post(
         tripId: trip.id,
         ...parsed.value,
         amount: new Prisma.Decimal(parsed.value.amount),
+        // Dashboard entries are attributed to the signed-in owner.
+        addedByName: req.user!.name,
       },
     });
     res.status(201).json({ expense });

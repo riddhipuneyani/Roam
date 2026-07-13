@@ -8,6 +8,7 @@ import generateRoutes from './routes/generate.js';
 import expenseRoutes from './routes/expenses.js';
 import budgetRoutes from './routes/budget.js';
 import currencyRoutes from './routes/currency.js';
+import sharedRoutes from './routes/shared.js';
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use('/api/trips/:tripId/budget', budgetRoutes);
 app.use('/api/trips', tripRoutes);
 app.use('/api/generate', generateRoutes);
 app.use('/api/currency', currencyRoutes);
+app.use('/api/shared/:shareToken', sharedRoutes);
 
 app.use(
   (

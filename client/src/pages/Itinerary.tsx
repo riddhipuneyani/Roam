@@ -1,151 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { AppNav } from '../components/AppNav';
-import { DayMap } from '../components/DayMap';
+import { ItinerarySpread } from '../components/ItinerarySpread';
 import { TravelImage } from '../components/TravelImage';
 import { Badge, Button, FadeInUp, Spinner } from '../components/ui';
 import { ApiRequestError, generateApi, tripsApi } from '../lib/api';
 import { destinationImage } from '../lib/images';
-import type { ActivityBlock, ActivitySlot, RestaurantRec, Trip } from '../lib/types';
-
-/* --------------------------------- helpers -------------------------------- */
-
-function parseCost(value: string): number | null {
-  const match = value.replace(/,/g, '').match(/[$₹]\s?(\d+(?:\.\d+)?)/);
-  return match ? Number(match[1]) : null;
-}
-
-const SLOT_LABELS: Record<ActivitySlot, string> = {
-  morning: 'Morning',
-  afternoon: 'Afternoon',
-  evening: 'Evening',
-};
-
-/* ------------------------------ regen button ------------------------------ */
-
-function RegenButton({
-  busy,
-  onClick,
-  label,
-}: {
-  busy: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  if (busy) {
-    return <Spinner size="sm" label={label} />;
-  }
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title="Not feeling it? Swap this one pick"
-      className="text-text-muted/60 transition-colors duration-200 hover:text-accent focus-visible:focus-ring"
-    >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" />
-        <path d="M13.7 1.8v2.7h-2.7" />
-      </svg>
-    </button>
-  );
-}
-
-/* ------------------------------ activity card ----------------------------- */
-
-function ActivityCard({
-  slot,
-  block,
-  busy,
-  onRegen,
-}: {
-  slot: ActivitySlot;
-  block: ActivityBlock;
-  busy: boolean;
-  onRegen: () => void;
-}) {
-  return (
-    <div className="border-t border-border/70 py-7">
-      <div className="grid gap-5 md:grid-cols-12">
-        <div className="flex items-start justify-between md:col-span-2 md:block">
-          <p className="kicker-accent">{SLOT_LABELS[slot]}</p>
-          <div className="md:mt-3">
-            <RegenButton busy={busy} onClick={onRegen} label={`Swap the ${slot} plan`} />
-          </div>
-        </div>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={block.activity}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.35 }}
-            className="md:col-span-10"
-          >
-            <div className="grid gap-6 md:grid-cols-12">
-              <div className="md:col-span-8">
-                <h4 className="font-display text-display-sm">{block.activity}</h4>
-                <p className="mt-2 font-body text-body text-text-muted">{block.description}</p>
-                <p className="mt-4 border-l-2 border-accent/70 pl-4 font-display text-lg italic leading-normal text-text-primary">
-                  {block.why}
-                </p>
-              </div>
-              <div className="md:col-span-4 md:border-l md:border-border/70 md:pl-6">
-                <p className="kicker">Where</p>
-                <p className="mt-1 font-body text-body-sm">{block.location}</p>
-                <p className="kicker mt-4">Cost</p>
-                <p className="mt-1 font-body text-body-sm font-medium text-secondary-accent-hover">
-                  {block.estimatedCost}
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        </AnimatePresence>
-      </div>
-    </div>
-  );
-}
-
-/* ----------------------------- restaurant card ---------------------------- */
-
-function RestaurantCard({
-  restaurant,
-  busy,
-  onRegen,
-}: {
-  restaurant: RestaurantRec;
-  busy: boolean;
-  onRegen: () => void;
-}) {
-  return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={restaurant.name}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.35 }}
-        className="grain flex h-full flex-col border border-border bg-surface p-5"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <h5 className="font-display text-xl">{restaurant.name}</h5>
-          <RegenButton busy={busy} onClick={onRegen} label={`Swap ${restaurant.name}`} />
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Badge variant="sage">{restaurant.cuisine}</Badge>
-          <Badge variant="clay">{restaurant.mealType}</Badge>
-          <Badge variant="neutral">{restaurant.priceRange}</Badge>
-        </div>
-        <p className="mt-4 font-body text-body-sm italic leading-relaxed text-text-muted">
-          {restaurant.why}
-        </p>
-      </motion.div>
-    </AnimatePresence>
-  );
-}
-
-/* --------------------------------- the page -------------------------------- */
+import type { ActivitySlot, Trip } from '../lib/types';
 
 export function Itinerary() {
   const { tripId } = useParams<{ tripId: string }>();
@@ -159,11 +21,22 @@ export function Itinerary() {
   const [activeDay, setActiveDay] = useState(1);
   const dayRefs = useRef<Record<number, HTMLElement | null>>({});
 
+  // sharing
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     if (!tripId) return;
     tripsApi
       .get(tripId)
-      .then(({ trip: loaded }) => setTrip(loaded))
+      .then(({ trip: loaded }) => {
+        setTrip(loaded);
+        if (loaded.shareToken) {
+          setShareUrl(`${window.location.origin}/shared/${loaded.shareToken}`);
+        }
+      })
       .catch((err: unknown) => {
         setLoadError(
           err instanceof ApiRequestError && err.status === 404
@@ -200,8 +73,7 @@ export function Itinerary() {
   const regenActivity = useCallback(
     async (dayNumber: number, slot: ActivitySlot) => {
       if (!trip) return;
-      const key = `${dayNumber}-${slot}`;
-      setBusySlot(key);
+      setBusySlot(`${dayNumber}-${slot}`);
       try {
         const { trip: updated } = await tripsApi.regenerateActivity(trip.id, dayNumber, slot);
         setTrip(updated);
@@ -221,8 +93,7 @@ export function Itinerary() {
   const regenRestaurant = useCallback(
     async (dayNumber: number, index: number) => {
       if (!trip) return;
-      const key = `${dayNumber}-restaurant-${index}`;
-      setBusySlot(key);
+      setBusySlot(`${dayNumber}-restaurant-${index}`);
       try {
         const { trip: updated } = await tripsApi.regenerateRestaurant(trip.id, dayNumber, index);
         setTrip(updated);
@@ -252,6 +123,49 @@ export function Itinerary() {
       );
     } finally {
       setActivating(false);
+    }
+  }
+
+  async function enableSharing() {
+    if (!trip) return;
+    setShareBusy(true);
+    try {
+      const { shareUrl: url } = await tripsApi.share(trip.id);
+      setShareUrl(url);
+    } catch (err) {
+      setToast(
+        err instanceof ApiRequestError ? err.message : 'Sharing didn’t switch on — please try again.',
+      );
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function revokeSharing() {
+    if (!trip) return;
+    setShareBusy(true);
+    try {
+      await tripsApi.unshare(trip.id);
+      setShareUrl(null);
+      setConfirmRevoke(false);
+      setToast('Sharing is off — the old link no longer works for anyone.');
+    } catch (err) {
+      setToast(
+        err instanceof ApiRequestError ? err.message : 'That didn’t work — please try again.',
+      );
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function copyShareUrl() {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setToast('Couldn’t reach the clipboard — select the link and copy it by hand.');
     }
   }
 
@@ -339,8 +253,6 @@ export function Itinerary() {
   }
 
   const itinerary = trip.itinerary;
-  const dayCosts = itinerary.days.map((d) => parseCost(d.dailyBudgetEstimate));
-  const maxCost = Math.max(...dayCosts.map((c) => c ?? 0), 1);
   const prefs = trip.preferences;
 
   return (
@@ -406,10 +318,73 @@ export function Itinerary() {
                   </Link>
                 </>
               )}
+              {!shareUrl && (
+                <button
+                  type="button"
+                  onClick={() => void enableSharing()}
+                  disabled={shareBusy}
+                  className="border border-background/50 px-4 py-1.5 font-body text-body-sm text-background transition-colors hover:border-background hover:bg-background/10"
+                >
+                  {shareBusy ? 'Switching on…' : 'Share this trip'}
+                </button>
+              )}
             </div>
           </FadeInUp>
         </div>
       </header>
+
+      {/* ------------------------------- share strip ------------------------------- */}
+      {shareUrl && (
+        <div className="grain border-b border-border/70 bg-surface">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4 md:px-12 lg:px-24">
+            <p className="kicker-accent whitespace-nowrap">Shared with your travel party</p>
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <input
+                readOnly
+                value={shareUrl}
+                onFocus={(e) => e.target.select()}
+                aria-label="Shareable link"
+                className="min-w-0 flex-1 border-b border-border-strong bg-transparent px-1 py-1 font-body text-body-sm text-text-muted focus:outline-none"
+              />
+              <Button variant="secondary" onClick={() => void copyShareUrl()} className="px-4 py-1.5">
+                {copied ? 'Copied ✓' : 'Copy link'}
+              </Button>
+            </div>
+            {confirmRevoke ? (
+              <span className="flex items-center gap-3 font-body text-body-sm">
+                <span className="text-text-muted">The link stops working for everyone.</span>
+                <button
+                  type="button"
+                  onClick={() => void revokeSharing()}
+                  disabled={shareBusy}
+                  className="font-medium text-accent hover:text-accent-hover"
+                >
+                  Stop sharing
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmRevoke(false)}
+                  className="text-text-muted hover:text-text-primary"
+                >
+                  Keep it live
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmRevoke(true)}
+                className="whitespace-nowrap font-body text-body-sm text-text-muted transition-colors hover:text-accent"
+              >
+                Stop sharing…
+              </button>
+            )}
+            <p className="w-full font-body text-caption text-text-muted">
+              Anyone with the link can read the itinerary and add to the shared expense ledger — no
+              account needed.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ------------------------- sticky chapter navigation ------------------------ */}
       <nav className="sticky top-0 z-30 border-b border-border/70 bg-background/95 backdrop-blur">
@@ -462,151 +437,24 @@ export function Itinerary() {
 
       {/* -------------------------------- day spreads ------------------------------- */}
       <main className="px-6 md:px-12 lg:px-24">
-        {itinerary.days.map((day) => {
-          const cost = dayCosts[day.dayNumber - 1];
-          return (
-            <section
-              key={day.dayNumber}
-              data-day={day.dayNumber}
-              ref={(el) => {
-                dayRefs.current[day.dayNumber] = el;
-              }}
-              className="scroll-mt-16 border-b border-border/70 py-16"
-            >
-              <div className="grid gap-10 lg:grid-cols-12">
-                {/* Day rail */}
-                <aside className="lg:col-span-3">
-                  <div className="lg:sticky lg:top-24">
-                    <p className="kicker-accent">Day {day.dayNumber}</p>
-                    <h2 className="mt-2 font-display text-display-md [text-wrap:balance]">
-                      {day.theme}
-                    </h2>
+        <ItinerarySpread
+          itinerary={itinerary}
+          busySlot={busySlot}
+          onRegenActivity={(dayNumber, slot) => void regenActivity(dayNumber, slot)}
+          onRegenRestaurant={(dayNumber, index) => void regenRestaurant(dayNumber, index)}
+          registerDayRef={(dayNumber, el) => {
+            dayRefs.current[dayNumber] = el;
+          }}
+        />
 
-                    <div className="mt-8 border-t border-border/70 pt-4">
-                      <p className="kicker">Getting around</p>
-                      <p className="mt-1 font-body text-body-sm text-text-muted">{day.transport}</p>
-                    </div>
-
-                    <div className="mt-5 border-t border-border/70 pt-4">
-                      <p className="kicker">Day budget</p>
-                      <p className="mt-1 font-body text-body font-medium text-secondary-accent-hover">
-                        {day.dailyBudgetEstimate}
-                      </p>
-                      {cost !== null && (
-                        <div className="mt-2 h-1.5 w-full rounded-full bg-border">
-                          <div
-                            className="h-1.5 rounded-full bg-secondary-accent transition-all duration-500"
-                            style={{ width: `${Math.max((cost / maxCost) * 100, 6)}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    <DayMap day={day} />
-
-                    <p className="mt-8 border-l-2 border-accent/60 pl-4 font-display text-base italic text-text-muted">
-                      {day.tip}
-                    </p>
-                  </div>
-                </aside>
-
-                {/* Day content */}
-                <div className="lg:col-span-9">
-                  {(['morning', 'afternoon', 'evening'] as const).map((slot) => (
-                    <ActivityCard
-                      key={slot}
-                      slot={slot}
-                      block={day[slot]}
-                      busy={busySlot === `${day.dayNumber}-${slot}`}
-                      onRegen={() => void regenActivity(day.dayNumber, slot)}
-                    />
-                  ))}
-
-                  <div className="border-t border-border/70 py-7">
-                    <p className="kicker-accent">At the table</p>
-                    <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                      {day.restaurants.map((restaurant, i) => (
-                        <RestaurantCard
-                          key={`${restaurant.name}-${i}`}
-                          restaurant={restaurant}
-                          busy={busySlot === `${day.dayNumber}-restaurant-${i}`}
-                          onRegen={() => void regenRestaurant(day.dayNumber, i)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-          );
-        })}
-
-        {/* ------------------------------ closing spread ------------------------------ */}
-        <section id="closing-spread" className="scroll-mt-16 border-t border-border/70 py-16">
-          <p className="kicker-accent">Before you go</p>
-          <h2 className="mt-3 font-display text-display-md">The practical part</h2>
-
-          <div className="mt-10 grid gap-12 lg:grid-cols-12">
-            <div className="lg:col-span-4">
-              <h3 className="font-display text-display-sm">What to pack</h3>
-              <ul className="mt-5 space-y-3">
-                {itinerary.packingList.map((item) => (
-                  <li key={item} className="flex items-baseline gap-3 font-body text-body-sm">
-                    <span className="h-2 w-2 flex-none translate-y-[-1px] border border-border-strong" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="lg:col-span-4">
-              <h3 className="font-display text-display-sm">Worth knowing</h3>
-              <ul className="mt-5 space-y-4">
-                {itinerary.practicalTips.map((tip) => (
-                  <li key={tip} className="flex items-baseline gap-3 font-body text-body-sm text-text-muted">
-                    <span className="font-display text-lg italic leading-none text-accent">*</span>
-                    {tip}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="lg:col-span-4">
-              <h3 className="font-display text-display-sm">Budget at a glance</h3>
-              <div className="mt-5 space-y-3">
-                {itinerary.days.map((day, i) => {
-                  const cost = dayCosts[i];
-                  return (
-                    <div key={day.dayNumber} className="grid grid-cols-12 items-center gap-3">
-                      <span className="kicker col-span-2">D{day.dayNumber}</span>
-                      <div className="col-span-7 h-1.5 rounded-full bg-border">
-                        <div
-                          className="h-1.5 rounded-full bg-secondary-accent"
-                          style={{ width: cost !== null ? `${Math.max((cost / maxCost) * 100, 6)}%` : '6%' }}
-                        />
-                      </div>
-                      <span className="col-span-3 text-right font-body text-body-sm text-text-muted">
-                        {day.dailyBudgetEstimate}
-                      </span>
-                    </div>
-                  );
-                })}
-                <p className="border-t border-border/70 pt-3 text-right font-body text-body-sm font-medium">
-                  {itinerary.estimatedTotalBudget}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-16 flex flex-wrap items-center gap-4 border-t border-border/70 pt-8">
-            <Button variant="secondary" onClick={() => navigate('/dashboard')}>
-              ← Back to your journeys
-            </Button>
-            <Button variant="ghost" onClick={() => navigate('/plan')}>
-              Sketch another trip
-            </Button>
-          </div>
-        </section>
+        <div className="flex flex-wrap items-center gap-4 border-t border-border/70 py-10">
+          <Button variant="secondary" onClick={() => navigate('/dashboard')}>
+            ← Back to your journeys
+          </Button>
+          <Button variant="ghost" onClick={() => navigate('/plan')}>
+            Sketch another trip
+          </Button>
+        </div>
       </main>
 
       {toast && <ToastStrip message={toast} />}

@@ -8,6 +8,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Plan } from './pages/Plan';
 import { Itinerary } from './pages/Itinerary';
 import { TripExpenses } from './pages/TripExpenses';
+import { SharedTrip } from './pages/SharedTrip';
 import { StyleGuide } from './pages/StyleGuide';
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/style-guide" element={<StyleGuide />} />
+          <Route path="/shared/:shareToken" element={<SharedTrip />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/plan" element={<Plan />} />

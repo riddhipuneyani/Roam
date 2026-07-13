@@ -84,8 +84,24 @@ export interface Trip {
   status: TripStatus;
   preferences: TripPreferences;
   itinerary: Itinerary | null;
+  /** Present when sharing is enabled (owner-visible only). */
+  shareToken?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** What the public shared-link endpoint exposes — nothing more. */
+export interface SharedTripData {
+  title: string;
+  destination: string;
+  status: TripStatus;
+  itinerary: Itinerary | null;
+  preferences: {
+    duration: number | null;
+    budgetTier: BudgetTier | null;
+    companions: Companions | null;
+    currency: string | null;
+  };
 }
 
 export type ExpenseCategory =
@@ -106,6 +122,8 @@ export interface TripExpense {
   currency: string;
   date: string;
   notes: string | null;
+  /** Who logged it — owner name or a shared-link visitor's name. */
+  addedByName: string;
   createdAt: string;
 }
 
@@ -136,6 +154,8 @@ export interface ExpenseInput {
   currency: string;
   date: string;
   notes?: string;
+  /** Required on the shared ledger; ignored for owner entries. */
+  addedByName?: string;
 }
 
 export interface TripSummary {
