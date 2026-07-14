@@ -6,6 +6,7 @@ import { asyncHandler } from '../lib/async-handler.js';
 import { GenerationError } from '../lib/openai.js';
 import { validatePreferences, type TripPreferences } from '../lib/itinerary.js';
 import { generateDestinations, generateItinerary } from '../lib/generate.js';
+import { GenerationTrace } from '../lib/trace.js';
 
 const router = Router();
 
@@ -108,8 +109,10 @@ router.post(
       tripId = draft.id;
     }
 
+    const trace = new GenerationTrace();
     try {
-      const itinerary = await generateItinerary(destination, preferences);
+      const itinerary = await generateItinerary(destination, preferences, trace);
+      const saveStart = Date.now();
       const trip = await prisma.trip.update({
         where: { id: tripId },
         data: {
@@ -119,6 +122,7 @@ router.post(
           itinerary: itinerary as unknown as Prisma.InputJsonValue,
         },
       });
+      trace.add('persistence (DB save)', Date.now() - saveStart);
       res.json({ trip });
     } catch (error) {
       if (error instanceof GenerationError) {
@@ -131,6 +135,11 @@ router.post(
         return;
       }
       throw error;
+    } finally {
+      trace.logSummary('itinerary generation', {
+        destination,
+        days: preferences.duration,
+      });
     }
   }),
 );

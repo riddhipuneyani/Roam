@@ -119,6 +119,12 @@ function describeFailure(error: unknown): string {
 
 const REQUEST_TIMEOUT_MS = Number(process.env.GENERATION_TIMEOUT_MS) || 120_000;
 
+/** Filled in by chatJson when provided — observability only, no behavior. */
+export interface ChatMeta {
+  servedBy?: string;
+  failovers?: string[];
+}
+
 /**
  * Send a system + user prompt pair through the provider chain and parse the
  * JSON response. Provider failures (rate limits, timeouts, outages) advance
@@ -130,6 +136,7 @@ export async function chatJson(
   system: string,
   user: string,
   temperature = 0.7,
+  meta?: ChatMeta,
 ): Promise<unknown> {
   const chain = generationChain();
   if (chain.length === 0) {
@@ -158,6 +165,9 @@ export async function chatJson(
       // revoked key) means this provider can't serve us right now — the next
       // one in the chain might. A repeat call here would fail identically.
       lastFailure = describeFailure(error);
+      if (meta) {
+        (meta.failovers ??= []).push(`${entry.label}: ${lastFailure.slice(0, 80)}`);
+      }
       const position = chain.indexOf(entry);
       const next = chain[position + 1];
       console.warn(
@@ -175,6 +185,7 @@ export async function chatJson(
     }
 
     console.log(`[roam] generation served by ${entry.label}`);
+    if (meta) meta.servedBy = entry.label;
     try {
       return JSON.parse(extractJson(content));
     } catch {

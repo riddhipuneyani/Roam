@@ -12,7 +12,8 @@ import {
   validateSingleActivity,
   validateSingleRestaurant,
 } from './itinerary.js';
-import { GenerationError, chatJson, isGenerationConfigured } from './openai.js';
+import { type ChatMeta, GenerationError, chatJson, isGenerationConfigured } from './openai.js';
+import { GenerationTrace } from './trace.js';
 import {
   type CandidateForPrompt,
   type DayCandidatesForPrompt,
@@ -31,7 +32,15 @@ import {
   regenerateRestaurantUserPrompt,
   retryNote,
 } from './prompts.js';
-import { type Eatery, type GeoPoint, geocode, haversineM, nearbyEateries, walkingMinutes } from './geo.js';
+import {
+  type Eatery,
+  type GeocodeStats,
+  type GeoPoint,
+  geocode,
+  haversineM,
+  nearbyEateries,
+  walkingMinutes,
+} from './geo.js';
 import {
   sampleActivity,
   sampleDestinations,
@@ -55,16 +64,27 @@ async function generateValidated<T>(
   user: string,
   validate: (value: unknown) => { ok: true; value: T } | { ok: false; errors: string[] },
   temperature: number,
+  trace?: GenerationTrace,
+  label = 'generation',
 ): Promise<T> {
   let lastErrors: string[] = [];
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const prompt = attempt === 0 ? user : user + retryNote(lastErrors);
 
+    const meta: ChatMeta = {};
+    const aiStart = Date.now();
     let raw: unknown;
     try {
-      raw = await chatJson(system, prompt, temperature);
+      raw = await chatJson(system, prompt, temperature, meta);
     } catch (error) {
+      trace?.add(
+        `${label}: AI call (attempt ${attempt + 1})`,
+        Date.now() - aiStart,
+        `FAILED — ${error instanceof Error ? error.message.slice(0, 100) : error}${
+          meta.failovers?.length ? `; failovers: ${meta.failovers.join(' | ')}` : ''
+        }`,
+      );
       // Malformed/truncated JSON burns a retry too, with a targeted note.
       // Provider errors (rate limits, outages) are not retried here — the
       // SDK already backed off, and a corrective prompt can't fix a 429.
@@ -77,8 +97,25 @@ async function generateValidated<T>(
       }
       throw error;
     }
+    trace?.add(
+      `${label}: AI call (attempt ${attempt + 1})`,
+      Date.now() - aiStart,
+      `served by ${meta.servedBy ?? 'unknown'}${
+        meta.failovers?.length ? `; failovers before success: ${meta.failovers.join(' | ')}` : ''
+      }`,
+    );
 
+    const validateStart = Date.now();
     const result = validate(raw);
+    trace?.add(
+      `${label}: schema validation (attempt ${attempt + 1})`,
+      Date.now() - validateStart,
+      result.ok
+        ? attempt === 0
+          ? 'passed on first try'
+          : 'passed after 1 retry'
+        : `failed with ${result.errors.length} error(s) — retrying with errors in prompt`,
+    );
     if (result.ok) {
       return result.value;
     }
@@ -92,9 +129,11 @@ async function generateValidated<T>(
 export async function generateItinerary(
   destination: string,
   preferences: TripPreferences,
+  trace?: GenerationTrace,
 ): Promise<Itinerary> {
   if (!isGenerationConfigured()) {
     logSampleMode('itinerary');
+    trace?.add('sample mode', 0, 'no provider configured — built-in sample served');
     return sampleItinerary(destination, preferences);
   }
   const itinerary = await generateValidated(
@@ -102,13 +141,15 @@ export async function generateItinerary(
     itineraryUserPrompt(destination, preferences),
     (value) => validateItinerary(value, preferences.duration),
     0.7,
+    trace,
+    'itinerary structure',
   );
 
   // Grounding pass: replace model-suggested restaurants with real nearby
   // places from OpenStreetMap. A failure here must never sink the whole
   // generation — the ungrounded itinerary is still a complete product.
   try {
-    await groundRestaurants(itinerary, preferences);
+    await groundRestaurants(itinerary, preferences, trace);
   } catch (error) {
     console.warn(
       `[roam] restaurant grounding failed — keeping model-suggested restaurants: ${
@@ -130,21 +171,26 @@ const normName = (name: string): string => name.trim().toLowerCase().replace(/\s
 /**
  * Geocode every activity location (cache-first, 1 req/s on misses) and
  * attach coordinates to the blocks so the client can draw day maps.
+ * Returns the number of unique location strings looked up.
  */
-async function annotateActivityCoordinates(itinerary: Itinerary): Promise<void> {
+async function annotateActivityCoordinates(
+  itinerary: Itinerary,
+  stats?: GeocodeStats,
+): Promise<number> {
   const resolved = new Map<string, GeoPoint | null>();
   for (const day of itinerary.days) {
     for (const slot of SLOTS) {
       const block = day[slot];
       const query = `${block.location}, ${itinerary.destination}`;
       if (!resolved.has(query)) {
-        resolved.set(query, await geocode(query));
+        resolved.set(query, await geocode(query, stats));
       }
       const point = resolved.get(query) ?? null;
       block.lat = point?.lat ?? null;
       block.lon = point?.lon ?? null;
     }
   }
+  return resolved.size;
 }
 
 function dayActivityPoints(day: ItineraryDay): Array<{ point: GeoPoint; activity: string }> {
@@ -231,16 +277,38 @@ function validateGroundedSelection(
   return { ok: true, value: v as GroundedSelection };
 }
 
-async function groundRestaurants(itinerary: Itinerary, preferences: TripPreferences): Promise<void> {
-  await annotateActivityCoordinates(itinerary);
+async function groundRestaurants(
+  itinerary: Itinerary,
+  preferences: TripPreferences,
+  trace?: GenerationTrace,
+): Promise<void> {
+  const geoStats: GeocodeStats = { cacheHits: 0, nominatimCalls: 0, failures: 0 };
+  const geocodeStart = Date.now();
+  const uniqueLocations = await annotateActivityCoordinates(itinerary, geoStats);
+  trace?.add(
+    'geocoding (Nominatim)',
+    Date.now() - geocodeStart,
+    `${uniqueLocations} unique locations — ${geoStats.cacheHits} cache hits, ` +
+      `${geoStats.nominatimCalls} live Nominatim calls (sequential by usage policy, 1 req/s)` +
+      (geoStats.failures ? `, ${geoStats.failures} failures` : ''),
+  );
 
   const allAnchors = itinerary.days.flatMap(dayActivityPoints);
   if (allAnchors.length === 0) {
     console.warn('[roam] no activity locations could be geocoded — restaurants stay ungrounded');
+    trace?.add('overpass (nearby eateries)', 0, 'skipped — nothing geocoded');
     return;
   }
 
+  const overpassStart = Date.now();
   const eateries = await nearbyEateries(allAnchors.map((a) => a.point));
+  trace?.add(
+    'overpass (nearby eateries)',
+    Date.now() - overpassStart,
+    `1 union query covering all ${allAnchors.length} anchor points in a single HTTP request ` +
+      `(not per-location, so parallel-vs-sequential does not arise) — ${eateries.length} places returned`,
+  );
+
   const dayCandidates: DayCandidatesForPrompt[] = itinerary.days.map((day) => ({
     dayNumber: day.dayNumber,
     candidates: rankCandidates(eateries, dayActivityPoints(day), new Set()),
@@ -249,6 +317,7 @@ async function groundRestaurants(itinerary: Itinerary, preferences: TripPreferen
   const groundedDays = dayCandidates.filter((d) => d.candidates.length > 0).length;
   if (groundedDays === 0) {
     console.warn('[roam] Overpass found no eateries near any activity — restaurants stay ungrounded');
+    trace?.add('restaurant grounding: AI call', 0, 'skipped — no candidates on any day');
     return;
   }
   console.log(
@@ -260,6 +329,8 @@ async function groundRestaurants(itinerary: Itinerary, preferences: TripPreferen
     groundedRestaurantsUserPrompt(itinerary, preferences, dayCandidates),
     (value) => validateGroundedSelection(value, itinerary, dayCandidates),
     0.6,
+    trace,
+    'restaurant grounding',
   );
 
   const eateryByName = new Map(eateries.map((e) => [normName(e.name), e]));

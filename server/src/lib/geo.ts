@@ -45,20 +45,29 @@ function enqueueNominatim<T>(job: () => Promise<T>): Promise<T> {
 const normalizeQuery = (query: string): string =>
   query.trim().toLowerCase().replace(/\s+/g, ' ').slice(0, 400);
 
+/** Observability-only counters, filled when a caller passes them in. */
+export interface GeocodeStats {
+  cacheHits: number;
+  nominatimCalls: number;
+  failures: number;
+}
+
 /**
  * Geocode a free-text location. Returns null when the place can't be found.
  * Lookup misses are cached; transient network failures are not.
  */
-export async function geocode(query: string): Promise<GeoPoint | null> {
+export async function geocode(query: string, stats?: GeocodeStats): Promise<GeoPoint | null> {
   const key = normalizeQuery(query);
   if (!key) return null;
 
   const cached = await prisma.geoCache.findUnique({ where: { query: key } });
   if (cached) {
+    if (stats) stats.cacheHits += 1;
     return cached.lat !== null && cached.lon !== null
       ? { lat: cached.lat, lon: cached.lon }
       : null;
   }
+  if (stats) stats.nominatimCalls += 1;
 
   let point: GeoPoint | null;
   try {
@@ -74,6 +83,7 @@ export async function geocode(query: string): Promise<GeoPoint | null> {
     });
   } catch (error) {
     // Transient failure — don't poison the cache with it.
+    if (stats) stats.failures += 1;
     console.warn(
       `[roam] geocoding failed for "${query}": ${error instanceof Error ? error.message : error}`,
     );
