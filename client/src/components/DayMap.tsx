@@ -120,6 +120,11 @@ export function DayMap({ day }: { day: ItineraryDay }) {
 
   if (pins.length === 0) return null;
 
+  // The legend only advertises marker types that are actually on this map —
+  // a day whose restaurants couldn't be located shouldn't promise "tables".
+  const hasActivities = pins.some((p) => p.kind === 'activity');
+  const hasRestaurants = pins.some((p) => p.kind === 'restaurant');
+
   return (
     <div className="mt-5 border-t border-border/70 pt-4">
       <p className="kicker">On the map</p>
@@ -129,10 +134,19 @@ export function DayMap({ day }: { day: ItineraryDay }) {
         aria-label={`Map of day ${day.dayNumber} places`}
       />
       <p className="mt-2 font-body text-caption text-text-muted">
-        <span className="roam-pin roam-pin-activity mr-1 !inline-flex !h-4 !w-4 text-[8px]">M</span>
-        activities ·
-        <span className="roam-pin roam-pin-restaurant mx-1 !inline-flex !h-4 !w-4 text-[8px]">•</span>
-        tables
+        {hasActivities && (
+          <>
+            <span className="roam-pin roam-pin-activity mr-1 !inline-flex !h-4 !w-4 text-[8px]">M</span>
+            activities
+          </>
+        )}
+        {hasActivities && hasRestaurants && ' · '}
+        {hasRestaurants && (
+          <>
+            <span className="roam-pin roam-pin-restaurant mx-1 !inline-flex !h-4 !w-4 text-[8px]">•</span>
+            tables
+          </>
+        )}
       </p>
     </div>
   );
