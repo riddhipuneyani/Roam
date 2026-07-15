@@ -1,4 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import puppeteer, { type Browser } from 'puppeteer-core';
+import { isProduction, primaryClientUrl } from './config.js';
 
 /**
  * PDF export via headless Chrome. One browser instance is launched lazily
@@ -22,12 +25,45 @@ export class PdfError extends Error {
 
 let browserPromise: Promise<Browser> | null = null;
 
+/**
+ * On hosts like Render, Chromium is installed at build time via
+ * `npx @puppeteer/browsers install chrome@stable --path .chrome`, whose
+ * final executable path embeds a build id. Rather than requiring that path
+ * to be computed by hand, walk the install dir and find the binary.
+ */
+function findBundledChrome(): string | undefined {
+  const root = process.env.CHROME_INSTALL_DIR ?? path.resolve('.chrome');
+  if (!fs.existsSync(root)) return undefined;
+  const stack = [root];
+  while (stack.length > 0) {
+    const dir = stack.pop()!;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) stack.push(full);
+      else if (entry.name === 'chrome' || entry.name === 'chrome.exe') return full;
+    }
+  }
+  return undefined;
+}
+
 async function launchBrowser(): Promise<Browser> {
-  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH ?? findBundledChrome();
   const browser = await puppeteer.launch({
+    // Locally the system Chrome is used; on a host like Render set
+    // PUPPETEER_EXECUTABLE_PATH to the Chromium installed at build time.
     ...(executablePath ? { executablePath } : { channel: 'chrome' }),
     headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--force-color-profile=srgb'],
+    args: [
+      // Required in containerized hosts (no user namespaces, tiny /dev/shm).
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--force-color-profile=srgb',
+      // Extra flags for constrained environments, e.g. "--single-process"
+      // on low-memory instances, without a code change.
+      ...(process.env.PUPPETEER_EXTRA_ARGS?.split(' ').filter(Boolean) ?? []),
+    ],
   });
   browser.on('disconnected', () => {
     browserPromise = null;
@@ -67,19 +103,21 @@ export async function exportTripPdf(
   tripId: string,
   authCookie: { name: string; value: string },
 ): Promise<Uint8Array> {
-  const clientUrl = (process.env.CLIENT_URL ?? 'http://localhost:5173').replace(/\/$/, '');
+  const clientUrl = primaryClientUrl();
   const browser = await getBrowser();
   const page = await browser.newPage();
 
   try {
     // The print route sits behind the normal auth guard — hand the caller's
-    // own session cookie to the headless page.
+    // own session cookie to the headless page, mirroring the flags the API
+    // sets (SameSite=None; Secure across domains in production).
     await page.setCookie({
       name: authCookie.name,
       value: authCookie.value,
       url: clientUrl,
       httpOnly: true,
-      sameSite: 'Lax',
+      sameSite: isProduction() ? 'None' : 'Lax',
+      secure: isProduction(),
     });
 
     await page.setViewport({ width: 1080, height: 1400, deviceScaleFactor: 2 });

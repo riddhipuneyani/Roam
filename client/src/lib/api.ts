@@ -38,7 +38,11 @@ export class ApiRequestError extends Error {
   }
 }
 
-const API_BASE = import.meta.env.VITE_API_URL ?? '';
+/**
+ * In production this is the deployed API origin (VITE_API_URL, baked at
+ * build time). Locally it stays empty and Vite's dev proxy handles /api.
+ */
+const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
 
 async function parseJson<T>(response: Response): Promise<T> {
   const text = await response.text();

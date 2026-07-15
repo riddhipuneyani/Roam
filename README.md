@@ -38,6 +38,28 @@ short-lived signed URLs — the service role key stays server-side only.
 > `docker-compose.yml` (local Postgres) is no longer required for dev; it's
 > kept in the repo only in case a fully-offline database is ever needed again.
 
+## Deployment (Render)
+
+`render.yaml` is a blueprint for two services — update the two placeholder URLs
+with the real ones after the first deploy:
+
+- **roam-api** (Node web service, `server/`): builds TypeScript, runs
+  `prisma migrate deploy`, installs Chromium for PDF export via
+  `@puppeteer/browsers` (the server auto-discovers the binary in `.chrome/`).
+  Needs `NODE_ENV=production` and the Supabase/JWT/generation secrets set in
+  the dashboard. `CLIENT_URL` may be a comma-separated list of allowed origins.
+- **roam-client** (static site, `client/`): `VITE_API_URL` must point at the
+  API origin (baked at build time), with an SPA rewrite of `/*` to
+  `/index.html`.
+
+Cross-domain auth: in production the session cookie is issued with
+`SameSite=None; Secure` (browsers require both when the frontend and API live
+on different domains); local dev stays `SameSite=Lax` over plain http. CORS
+allows exactly the origins in `CLIENT_URL`, with credentials.
+
+<!-- After deploying, record the live URLs here: -->
+<!-- Production: https://<frontend-url> · API: https://<api-url> -->
+
 ## Itinerary generation
 
 Generation runs through a chain of OpenAI-compatible providers, tried in order until

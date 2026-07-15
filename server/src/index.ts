@@ -9,11 +9,11 @@ import expenseRoutes from './routes/expenses.js';
 import budgetRoutes from './routes/budget.js';
 import currencyRoutes from './routes/currency.js';
 import sharedRoutes from './routes/shared.js';
+import { clientUrls } from './lib/config.js';
 
 const app = express();
 
 const PORT = Number(process.env.PORT) || 3001;
-const CLIENT_URL = process.env.CLIENT_URL ?? 'http://localhost:5173';
 
 if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET environment variable is required');
@@ -23,9 +23,10 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL environment variable is required');
 }
 
+// CLIENT_URL may list several allowed origins (prod + previews), comma-separated.
 app.use(
   cors({
-    origin: CLIENT_URL,
+    origin: clientUrls(),
     credentials: true,
   }),
 );

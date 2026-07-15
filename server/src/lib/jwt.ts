@@ -43,8 +43,11 @@ export function getCookieOptions() {
 
   return {
     httpOnly: true,
+    // In production the frontend and API live on different domains, so the
+    // cookie must be SameSite=None (which browsers only accept with Secure).
+    // Local dev stays Lax over plain http.
     secure: isProduction,
-    sameSite: 'lax' as const,
+    sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
   };

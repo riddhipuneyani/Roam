@@ -14,6 +14,7 @@ import { regenerateActivity, regenerateRestaurant } from '../lib/generate.js';
 import { AUTH_COOKIE_NAME } from '../lib/jwt.js';
 import { exportTripPdf } from '../lib/pdf.js';
 import { hasFreshPdf, isStorageConfigured, signedPdfUrl, uploadTripPdf } from '../lib/supabase.js';
+import { primaryClientUrl } from '../lib/config.js';
 
 const router = Router();
 
@@ -79,8 +80,7 @@ router.post(
 );
 
 function shareUrlFor(token: string): string {
-  const clientUrl = (process.env.CLIENT_URL ?? 'http://localhost:5173').replace(/\/$/, '');
-  return `${clientUrl}/shared/${token}`;
+  return `${primaryClientUrl()}/shared/${token}`;
 }
 
 router.post(

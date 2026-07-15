@@ -104,12 +104,10 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 router.post('/logout', (_req: Request, res: Response) => {
-  res.clearCookie(AUTH_COOKIE_NAME, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-  });
+  // Must match the set-cookie options exactly (minus maxAge), or browsers
+  // ignore the clear in the cross-domain production setup.
+  const { maxAge: _maxAge, ...clearOptions } = getCookieOptions();
+  res.clearCookie(AUTH_COOKIE_NAME, clearOptions);
   res.json({ message: 'Logged out' });
 });
 
