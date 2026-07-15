@@ -5,8 +5,10 @@ A calm, editorial travel planning platform. Answer a handful of quiet questions 
 ## Prerequisites
 
 - Node.js 20+
-- Docker Desktop (for PostgreSQL — must be running before `npm run db:up`)
+- A Supabase project (Postgres + Storage) — connection strings and service role
+  key from the dashboard, see `server/.env.example`
 - A Gemini API key (optional in dev — see below)
+- Google Chrome installed (PDF export drives it via puppeteer-core)
 
 ## Quick start
 
@@ -14,13 +16,10 @@ A calm, editorial travel planning platform. Answer a handful of quiet questions 
 # Install dependencies (root, client, and server)
 npm install
 
-# Start PostgreSQL
-npm run db:up
-
-# Copy env files and adjust if needed
+# Copy env files and fill in the Supabase values
 cp server/.env.example server/.env
 
-# Run database migrations
+# Apply migrations to the Supabase database (uses DIRECT_URL)
 npm run db:migrate
 
 # Start client + server
@@ -29,7 +28,15 @@ npm run dev
 
 - **Client:** http://localhost:5173
 - **Server:** http://localhost:3001
-- **Postgres:** localhost:5432 (user/password/db: `roam`)
+
+The database lives on Supabase: `DATABASE_URL` is the pooled connection the app
+uses at runtime (`?pgbouncer=true`), `DIRECT_URL` the direct connection Prisma
+migrations run against. Exported PDFs are written to a **private** Supabase
+Storage bucket (`trip-pdfs`, created automatically) and downloaded through
+short-lived signed URLs — the service role key stays server-side only.
+
+> `docker-compose.yml` (local Postgres) is no longer required for dev; it's
+> kept in the repo only in case a fully-offline database is ever needed again.
 
 ## Itinerary generation
 

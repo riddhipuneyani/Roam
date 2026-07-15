@@ -13,6 +13,7 @@ import {
 import { regenerateActivity, regenerateRestaurant } from '../lib/generate.js';
 import { AUTH_COOKIE_NAME } from '../lib/jwt.js';
 import { exportTripPdf } from '../lib/pdf.js';
+import { hasFreshPdf, isStorageConfigured, signedPdfUrl, uploadTripPdf } from '../lib/supabase.js';
 
 const router = Router();
 
@@ -160,12 +161,14 @@ router.get(
       return;
     }
 
-    try {
-      const pdf = await exportTripPdf(trip.id, {
-        name: AUTH_COOKIE_NAME,
-        value: req.cookies[AUTH_COOKIE_NAME],
+    if (!isStorageConfigured()) {
+      res.status(503).json({
+        error: 'PDF export isn’t configured — set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
       });
+      return;
+    }
 
+    try {
       const prefs = trip.preferences as { duration?: unknown };
       const city =
         trip.destination
@@ -175,10 +178,24 @@ router.get(
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/^-+|-+$/g, '') || 'trip';
       const days = typeof prefs.duration === 'number' ? `${prefs.duration}days` : 'itinerary';
+      const filename = `roam-${city}-${days}.pdf`;
 
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="roam-${city}-${days}.pdf"`);
-      res.send(Buffer.from(pdf));
+      // Reuse the stored PDF when the trip hasn't changed since it was made —
+      // no point paying for a Puppeteer render of the identical document.
+      const reused = await hasFreshPdf(trip.userId, trip.id, trip.updatedAt);
+      if (!reused) {
+        const pdf = await exportTripPdf(trip.id, {
+          name: AUTH_COOKIE_NAME,
+          value: req.cookies[AUTH_COOKIE_NAME],
+        });
+        await uploadTripPdf(trip.userId, trip.id, pdf);
+        console.log(`[roam] pdf stored: ${trip.userId}/${trip.id}/itinerary.pdf`);
+      } else {
+        console.log(`[roam] pdf reused from storage for trip ${trip.id}`);
+      }
+
+      const url = await signedPdfUrl(trip.userId, trip.id, filename);
+      res.json({ url, filename, reused });
     } catch (error) {
       console.error(
         '[roam] pdf export failed:',

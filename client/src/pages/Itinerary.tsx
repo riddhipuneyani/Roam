@@ -174,15 +174,14 @@ export function Itinerary() {
     if (!trip || exporting) return;
     setExporting(true);
     try {
-      const { blob, filename } = await tripsApi.exportPdf(trip.id);
-      const url = URL.createObjectURL(blob);
+      // The signed URL already carries a content-disposition with the
+      // filename, so a plain anchor click downloads it correctly.
+      const { url } = await tripsApi.exportPdf(trip.id);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = filename;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      URL.revokeObjectURL(url);
     } catch (err) {
       setToast(
         err instanceof ApiRequestError
