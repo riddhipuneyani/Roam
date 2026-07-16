@@ -7,12 +7,14 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { ApiRequestError, authApi, type User } from '../lib/api';
+import { ApiRequestError, authApi, setUnauthorizedHandler, type User } from '../lib/api';
 
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  /** True when a signed-in session was rejected by the API (expired/revoked). */
+  sessionExpired: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -24,6 +26,19 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  // First 401 from any authenticated endpoint flips auth state immediately —
+  // protected pages unmount and redirect instead of re-requesting in a loop.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setUser((current) => {
+        if (current !== null) setSessionExpired(true);
+        return null;
+      });
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   const refreshUser = useCallback(async () => {
     try {
@@ -50,12 +65,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const { user: loggedInUser } = await authApi.login({ email, password });
+    setSessionExpired(false);
     setUser(loggedInUser);
   }, []);
 
   const signup = useCallback(
     async (name: string, email: string, password: string) => {
       const { user: newUser } = await authApi.signup({ name, email, password });
+      setSessionExpired(false);
       setUser(newUser);
     },
     [],
@@ -71,12 +88,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isLoading,
       isAuthenticated: user !== null,
+      sessionExpired,
       login,
       signup,
       logout,
       refreshUser,
     }),
-    [user, isLoading, login, signup, logout, refreshUser],
+    [user, isLoading, sessionExpired, login, signup, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

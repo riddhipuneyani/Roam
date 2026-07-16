@@ -8,7 +8,7 @@ import { useAuth } from '../hooks/useAuth';
 
 export function Login() {
   const navigate = useNavigate();
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, sessionExpired } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +53,15 @@ export function Login() {
           <p className="mt-3 font-body text-body text-text-muted">
             Your drafts and itineraries are exactly as you left them.
           </p>
+
+          {sessionExpired && !error && (
+            <p
+              role="status"
+              className="mt-6 border-l-2 border-secondary-accent bg-secondary-accent/10 px-4 py-3 font-body text-body-sm text-text-primary"
+            >
+              Your session expired — please log in again to pick up where you left off.
+            </p>
+          )}
 
           <form onSubmit={handleSubmit} className="mt-10 flex flex-col gap-5">
             {error && (

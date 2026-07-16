@@ -39,10 +39,27 @@ export class ApiRequestError extends Error {
 }
 
 /**
- * In production this is the deployed API origin (VITE_API_URL, baked at
- * build time). Locally it stays empty and Vite's dev proxy handles /api.
+ * Leave VITE_API_URL EMPTY in both dev and production: locally Vite's dev
+ * proxy forwards /api to the server, and in production a Vercel rewrite
+ * (client/vercel.json) proxies /api to the Render backend so every request
+ * is same-origin — browsers increasingly refuse cross-site cookies even
+ * with correct SameSite=None; Secure flags. Only set VITE_API_URL if the
+ * app is ever hosted somewhere without a proxy/rewrite facility.
  */
 const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
+
+/**
+ * Called once when any authenticated endpoint answers 401 — the session is
+ * gone (expired/revoked), so auth state must flip immediately rather than
+ * letting pages re-request in a loop. Auth endpoints are excluded: a 401
+ * from login is just a wrong password, and from /me it's simply "not
+ * logged in yet".
+ */
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
+}
 
 async function parseJson<T>(response: Response): Promise<T> {
   const text = await response.text();
@@ -73,6 +90,9 @@ export async function apiRequest<T>(
   const data = await parseJson<T & ApiError>(response);
 
   if (!response.ok) {
+    if (response.status === 401 && !path.startsWith('/api/auth/')) {
+      unauthorizedHandler?.();
+    }
     const message =
       typeof data === 'object' && data !== null && 'error' in data && data.error
         ? data.error
