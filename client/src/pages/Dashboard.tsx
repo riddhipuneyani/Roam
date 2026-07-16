@@ -49,6 +49,16 @@ function TripTile({
               <Badge variant="clay">Draft</Badge>
             </div>
           )}
+          {trip.status === 'generating' && (
+            <div className="absolute left-3 top-3">
+              <Badge variant="clay">Drafting…</Badge>
+            </div>
+          )}
+          {trip.status === 'failed' && (
+            <div className="absolute left-3 top-3">
+              <Badge variant="clay">Didn’t finish</Badge>
+            </div>
+          )}
           {trip.status === 'active' && (
             <div className="absolute left-3 top-3">
               <Badge variant="sage">Underway</Badge>

@@ -132,6 +132,12 @@ export const tripsApi = {
   duplicate: (id: string) =>
     apiRequest<{ trip: Trip }>(`/api/trips/${id}/duplicate`, { method: 'POST' }),
 
+  /** Lightweight generation-status poll; includes the trip once settled. */
+  status: (id: string) =>
+    apiRequest<{ status: import('./types').TripStatus; trip?: Trip; error?: string }>(
+      `/api/trips/${id}/status`,
+    ),
+
   activate: (id: string) =>
     apiRequest<{ trip: Trip }>(`/api/trips/${id}/activate`, { method: 'POST' }),
 
@@ -224,14 +230,15 @@ export const generateApi = {
       body: JSON.stringify({ preferences, exclude }),
     }),
 
+  /** Starts an async drafting job; poll tripsApi.status until it settles. */
   itinerary: (preferences: TripPreferences) =>
-    apiRequest<{ trip: Trip }>('/api/generate/itinerary', {
+    apiRequest<{ tripId: string; status: 'generating' }>('/api/generate/itinerary', {
       method: 'POST',
       body: JSON.stringify({ preferences }),
     }),
 
   retryItinerary: (tripId: string) =>
-    apiRequest<{ trip: Trip }>('/api/generate/itinerary', {
+    apiRequest<{ tripId: string; status: 'generating' }>('/api/generate/itinerary', {
       method: 'POST',
       body: JSON.stringify({ tripId }),
     }),

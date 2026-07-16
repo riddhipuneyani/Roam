@@ -20,6 +20,66 @@ function tripTitle(destination: string, preferences: TripPreferences): string {
   return `${preferences.duration} days in ${city}`;
 }
 
+/* ------------------------- async generation job ------------------------- */
+
+/**
+ * Generation runs as a detached in-process job: the HTTP request returns a
+ * trip id immediately (the full pipeline can outlive proxy timeouts), and
+ * the client polls GET /api/trips/:id/status. One run per trip at a time;
+ * a job orphaned by a server restart is healed by the status endpoint's
+ * staleness check.
+ */
+const runningJobs = new Set<string>();
+
+function startGenerationJob(
+  tripId: string,
+  destination: string,
+  preferences: TripPreferences,
+): void {
+  if (runningJobs.has(tripId)) return; // already drafting this trip
+  runningJobs.add(tripId);
+
+  const trace = new GenerationTrace();
+  void (async () => {
+    try {
+      const itinerary = await generateItinerary(destination, preferences, trace);
+      await prisma.trip.update({
+        where: { id: tripId },
+        data: {
+          status: 'complete',
+          destination: itinerary.destination,
+          title: tripTitle(itinerary.destination, preferences),
+          itinerary: itinerary as unknown as Prisma.InputJsonValue,
+          generationError: null,
+        },
+      });
+    } catch (error) {
+      const message =
+        error instanceof GenerationError && error.kind === 'provider'
+          ? error.message
+          : FRIENDLY_FAILURE;
+      console.error(
+        `[roam] background generation failed for trip ${tripId}:`,
+        error instanceof Error ? error.message : error,
+      );
+      await prisma.trip
+        .update({
+          where: { id: tripId },
+          data: { status: 'failed', generationError: message },
+        })
+        .catch((updateError) =>
+          console.error('[roam] could not record generation failure:', updateError),
+        );
+    } finally {
+      runningJobs.delete(tripId);
+      trace.logSummary('itinerary generation (async job)', {
+        destination,
+        days: preferences.duration,
+      });
+    }
+  })();
+}
+
 router.post(
   '/destinations',
   asyncHandler(async (req: Request, res: Response) => {
@@ -66,12 +126,20 @@ router.post(
     let destination: string;
 
     if (typeof req.body?.tripId === 'string') {
-      // Retrying a draft that failed generation earlier.
+      // Retrying a draft/failed trip, or re-requesting one already drafting.
       const draft = await prisma.trip.findFirst({
         where: { id: req.body.tripId, userId },
       });
       if (!draft) {
         res.status(404).json({ error: 'Trip not found' });
+        return;
+      }
+      if (draft.status === 'complete' || draft.status === 'active') {
+        res.status(400).json({ error: 'This trip already has its itinerary' });
+        return;
+      }
+      if (draft.status === 'generating' && runningJobs.has(draft.id)) {
+        res.status(202).json({ tripId: draft.id, status: 'generating' });
         return;
       }
       const parsed = validatePreferences(draft.preferences);
@@ -97,50 +165,31 @@ router.post(
       }
       destination = preferences.destination;
 
+      // Born directly in the "generating" state — one DB write, fast 202.
       const draft = await prisma.trip.create({
         data: {
           userId,
           title: tripTitle(destination, preferences),
           destination,
-          status: 'draft',
+          status: 'generating',
           preferences: preferences as unknown as Prisma.InputJsonValue,
         },
       });
       tripId = draft.id;
+      startGenerationJob(tripId, destination, preferences);
+      res.status(202).json({ tripId, status: 'generating' });
+      return;
     }
 
-    const trace = new GenerationTrace();
-    try {
-      const itinerary = await generateItinerary(destination, preferences, trace);
-      const saveStart = Date.now();
-      const trip = await prisma.trip.update({
-        where: { id: tripId },
-        data: {
-          status: 'complete',
-          destination: itinerary.destination,
-          title: tripTitle(itinerary.destination, preferences),
-          itinerary: itinerary as unknown as Prisma.InputJsonValue,
-        },
-      });
-      trace.add('persistence (DB save)', Date.now() - saveStart);
-      res.json({ trip });
-    } catch (error) {
-      if (error instanceof GenerationError) {
-        console.error('[roam] itinerary generation failed:', error.message);
-        // Keep the draft so the traveler can retry from the dashboard.
-        res.status(502).json({
-          error: error.kind === 'provider' ? error.message : FRIENDLY_FAILURE,
-          tripId,
-        });
-        return;
-      }
-      throw error;
-    } finally {
-      trace.logSummary('itinerary generation', {
-        destination,
-        days: preferences.duration,
-      });
-    }
+    // Retry path: flip back to drafting, kick off the detached job, answer
+    // immediately — the pipeline can take minutes, longer than any proxy
+    // timeout.
+    await prisma.trip.update({
+      where: { id: tripId },
+      data: { status: 'generating', generationError: null },
+    });
+    startGenerationJob(tripId, destination, preferences);
+    res.status(202).json({ tripId, status: 'generating' });
   }),
 );
 

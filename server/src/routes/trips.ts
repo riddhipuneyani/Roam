@@ -56,6 +56,41 @@ router.get(
   }),
 );
 
+/** How long a "generating" trip may go untouched before we call it lost
+ *  (covers server restarts that orphan an in-process job). */
+const GENERATION_STALE_MS = 10 * 60 * 1000;
+
+router.get(
+  '/:id/status',
+  asyncHandler(async (req: Request, res: Response) => {
+    let trip = await findOwnedTrip(req.params.id, req.user!.id);
+    if (!trip) {
+      res.status(404).json({ error: 'Trip not found' });
+      return;
+    }
+
+    // Self-heal: a job orphaned by a restart would stay "generating" forever.
+    if (
+      trip.status === 'generating' &&
+      Date.now() - trip.updatedAt.getTime() > GENERATION_STALE_MS
+    ) {
+      trip = await prisma.trip.update({
+        where: { id: trip.id },
+        data: {
+          status: 'failed',
+          generationError: 'The drafting was interrupted — please try again.',
+        },
+      });
+    }
+
+    if (trip.status === 'complete' || trip.status === 'active') {
+      res.json({ status: trip.status, trip });
+      return;
+    }
+    res.json({ status: trip.status, error: trip.generationError ?? undefined });
+  }),
+);
+
 router.post(
   '/:id/duplicate',
   asyncHandler(async (req: Request, res: Response) => {

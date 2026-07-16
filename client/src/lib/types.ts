@@ -23,7 +23,7 @@ export interface TripPreferences {
   customInterests: string[];
 }
 
-export type TripStatus = 'draft' | 'complete' | 'active';
+export type TripStatus = 'draft' | 'generating' | 'complete' | 'failed' | 'active';
 
 export interface ActivityBlock {
   activity: string;
@@ -86,6 +86,8 @@ export interface Trip {
   itinerary: Itinerary | null;
   /** Present when sharing is enabled (owner-visible only). */
   shareToken?: string | null;
+  /** Friendly reason when an async generation job failed. */
+  generationError?: string | null;
   createdAt: string;
   updatedAt: string;
 }

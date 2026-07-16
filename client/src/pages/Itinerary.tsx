@@ -47,6 +47,30 @@ export function Itinerary() {
       });
   }, [tripId]);
 
+  /* While the drafting job runs, poll its status. Closing the tab and
+     reopening the trip lands back here and picks up wherever the job is. */
+  useEffect(() => {
+    if (!trip || trip.status !== 'generating') return;
+    const timer = setInterval(async () => {
+      try {
+        const result = await tripsApi.status(trip.id);
+        if ((result.status === 'complete' || result.status === 'active') && result.trip) {
+          setTrip(result.trip);
+        } else if (result.status === 'failed') {
+          setTrip((current) =>
+            current
+              ? { ...current, status: 'failed', generationError: result.error ?? null }
+              : current,
+          );
+        }
+      } catch {
+        /* transient poll failure — the next tick tries again */
+      }
+    }, 4000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip?.status, trip?.id]);
+
   /* Track which day chapter is in view for the sticky nav */
   useEffect(() => {
     if (!trip?.itinerary) return;
@@ -197,8 +221,11 @@ export function Itinerary() {
     if (!trip) return;
     setRetrying(true);
     try {
-      const { trip: updated } = await generateApi.retryItinerary(trip.id);
-      setTrip(updated);
+      await generateApi.retryItinerary(trip.id);
+      // Back into the drafting state — the poll above takes it from here.
+      setTrip((current) =>
+        current ? { ...current, status: 'generating', generationError: null } : current,
+      );
     } catch (err) {
       setToast(
         err instanceof ApiRequestError
@@ -238,19 +265,57 @@ export function Itinerary() {
     );
   }
 
+  /* The calm waiting room: the drafting job is running server-side and the
+     poll above will flip this view the moment it settles. Safe to close. */
+  if (trip.status === 'generating') {
+    return (
+      <div className="min-h-screen bg-background">
+        <AppNav />
+        <main className="grid min-h-[70vh] gap-10 px-6 py-16 md:px-12 lg:grid-cols-12 lg:px-24">
+          <div className="flex flex-col justify-center lg:col-span-6">
+            <p className="kicker-accent">Drafting your days</p>
+            <h1 className="mt-4 max-w-xl font-display text-display-lg [text-wrap:balance]">
+              Sketching {trip.destination.split(',')[0]}…
+            </h1>
+            <div className="mt-10 flex items-center gap-4">
+              <Spinner size="lg" />
+              <p className="font-display text-lg italic text-text-muted">
+                Real places, honest prices, and the why behind each pick.
+              </p>
+            </div>
+            <p className="mt-14 max-w-sm border-l-2 border-border pl-4 font-body text-body-sm text-text-muted">
+              This usually takes a minute or two. You can close this tab — the draft keeps
+              working, and this page picks it up whenever you come back.
+            </p>
+          </div>
+          <div className="hidden lg:col-span-5 lg:col-start-8 lg:block">
+            <TravelImage
+              src={destinationImage(trip.destination)}
+              alt={trip.destination}
+              fallbackSeed={trip.id}
+              className="aspect-[4/5] w-full object-cover"
+            />
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   if (!trip.itinerary) {
     return (
       <div className="min-h-screen bg-background">
         <AppNav />
         <main className="grid gap-10 px-6 py-24 md:px-12 lg:grid-cols-12 lg:px-24">
           <div className="lg:col-span-6">
-            <p className="kicker-accent">Still a sketch</p>
+            <p className="kicker-accent">
+              {trip.status === 'failed' ? 'A small hitch' : 'Still a sketch'}
+            </p>
             <h1 className="mt-3 font-display text-display-md [text-wrap:balance]">
               {trip.title} hasn’t been drafted yet.
             </h1>
             <p className="mt-4 max-w-md font-body text-body text-text-muted">
-              Your answers are saved. Give the draft another go and we’ll lay out every day —
-              places, prices, and the why behind each pick.
+              {trip.generationError ??
+                'Your answers are saved. Give the draft another go and we’ll lay out every day — places, prices, and the why behind each pick.'}
             </p>
             <Button className="mt-8 px-7 py-3" onClick={() => void retryDraft()} disabled={retrying}>
               {retrying ? (

@@ -30,6 +30,8 @@ model Trip {
   itinerary   Json?
   /// Set when sharing is enabled; clearing it invalidates the public link.
   shareToken  String?       @unique
+  /// Friendly failure reason when an async generation job ends in "failed".
+  generationError String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   expenses    TripExpense[]

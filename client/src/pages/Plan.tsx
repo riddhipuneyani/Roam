@@ -101,9 +101,12 @@ export function Plan() {
     setPhase('crafting');
     try {
       const preferences = buildPreferences(answers, destination);
-      const { trip } = await generateApi.itinerary(preferences);
+      // Drafting runs as a background job — this returns in well under a
+      // second, and the itinerary page shows the calm waiting state while
+      // polling for completion (resilient to closing the tab).
+      const { tripId } = await generateApi.itinerary(preferences);
       clearPlanDraft();
-      navigate(`/itinerary/${trip.id}`, { replace: true });
+      navigate(`/itinerary/${tripId}`, { replace: true });
     } catch (err) {
       const message =
         err instanceof ApiRequestError
@@ -130,9 +133,9 @@ export function Plan() {
     }
     setPhase('crafting');
     try {
-      const { trip } = await generateApi.retryItinerary(failedTripId);
+      const { tripId } = await generateApi.retryItinerary(failedTripId);
       clearPlanDraft();
-      navigate(`/itinerary/${trip.id}`, { replace: true });
+      navigate(`/itinerary/${tripId}`, { replace: true });
     } catch (err) {
       setFailureMessage(
         err instanceof ApiRequestError
