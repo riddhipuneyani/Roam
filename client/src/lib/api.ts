@@ -39,14 +39,14 @@ export class ApiRequestError extends Error {
 }
 
 /**
- * Leave VITE_API_URL EMPTY in both dev and production: locally Vite's dev
- * proxy forwards /api to the server, and in production a Vercel rewrite
- * (client/vercel.json) proxies /api to the Render backend so every request
- * is same-origin — browsers increasingly refuse cross-site cookies even
- * with correct SameSite=None; Secure flags. Only set VITE_API_URL if the
- * app is ever hosted somewhere without a proxy/rewrite facility.
+ * All API calls are same-origin, always: locally Vite's dev proxy forwards
+ * /api to the server, and in production a Vercel rewrite (client/vercel.json)
+ * proxies /api to the Render backend. This is deliberate — browsers now
+ * block cross-site cookies even with correct SameSite=None; Secure flags,
+ * so a cross-origin API base would break auth. No env var can reintroduce
+ * that failure mode.
  */
-const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
+const API_BASE = '';
 
 /**
  * Called once when any authenticated endpoint answers 401 — the session is
