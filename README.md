@@ -57,8 +57,13 @@ Cross-domain auth: in production the session cookie is issued with
 on different domains); local dev stays `SameSite=Lax` over plain http. CORS
 allows exactly the origins in `CLIENT_URL`, with credentials.
 
-<!-- After deploying, record the live URLs here: -->
-<!-- Production: https://<frontend-url> · API: https://<api-url> -->
+**Live**: [roam-pied-five.vercel.app](https://roam-pied-five.vercel.app) (client, Vercel)
+· [roam-gx8e.onrender.com](https://roam-gx8e.onrender.com) (API, Render).
+The client proxies `/api/*` to the API via a Vercel rewrite (`client/vercel.json`),
+so the browser only ever makes same-origin requests and the auth cookie stays
+first-party — browsers block cross-site cookies even with correct
+`SameSite=None; Secure` flags, so don't bypass the rewrite with an absolute
+API URL.
 
 ## Itinerary generation
 
